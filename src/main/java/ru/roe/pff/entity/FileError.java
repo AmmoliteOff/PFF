@@ -26,7 +26,7 @@ public class FileError {
     private ErrorType errorType;
 
     @Column(nullable = false)
-    private Integer index;
+    private Integer rowIndex;
 
     @Column(nullable = false)
     private Integer columnIndex;
