@@ -2,8 +2,8 @@ spring:
   application:
     name: Product Feed Fixer
   datasource:
-    url: jdbc:postgresql://localhost:5678/pff
-    password: P0sTgR3SsS!
+    url: jdbc:postgresql://localhost:5432/pff
+    password: postgres
     username: postgres
     driver-class-name: org.postgresql.Driver
   jpa:
@@ -12,3 +12,17 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  servlet:
+    multipart:
+      max-file-size: 700MB
+      max-request-size: 700MB
+
+logging:
+  level:
+    ru.roe.pff: DEBUG
+
+minio:
+  username: minioadmin
+  password: minioadmin
+  url: "http://localhost:9000"
+  bucket-name: "pff-bucket"
