@@ -23,6 +23,7 @@ public class FileService {
 
     public void createFromFile(MultipartFile file) {
         try {
+            // TODO: proceed processing ASYNC!
             fileProcessingService.processFile(file);
         } catch (IOException e) {
             throw new RuntimeException(e);

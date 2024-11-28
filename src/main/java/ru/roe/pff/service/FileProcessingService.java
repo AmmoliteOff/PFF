@@ -90,6 +90,7 @@ public class FileProcessingService {
 
         uploadFileToMinio(mf, fileName);
 
+        // TODO: proceed processing ASYNC!
         try (InputStream is = mf.getInputStream()) {
             proceedProcessing(is, fileName);
         }
