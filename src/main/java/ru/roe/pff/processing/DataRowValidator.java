@@ -17,9 +17,10 @@ public class DataRowValidator {
     private final FileErrorRepository fileErrorRepository;
     private final Set<String> seenSkus = new HashSet<>();
     private final List<String> requiredTitles = new ArrayList<>() {{
-        add("sku");
-        add("title");
-        add("price");
+        add("внешний id");
+//        add("sku");
+//        add("title");
+//        add("price");
     }};
     private List<String> titles;
 
@@ -37,10 +38,10 @@ public class DataRowValidator {
             for (var requiredTitle : requiredTitles) {
                 if (row.getData().get(titles.indexOf(requiredTitle)).equalsIgnoreCase("")) {
                     saveError(
-                        "Required field is missing",
-                        ErrorType.TECHNICAL,
-                        row.getIndex(),
-                        titles.indexOf(requiredTitle)
+                            "Required field is missing",
+                            ErrorType.TECHNICAL,
+                            row.getIndex(),
+                            titles.indexOf(requiredTitle)
                     );
                 }
             }
