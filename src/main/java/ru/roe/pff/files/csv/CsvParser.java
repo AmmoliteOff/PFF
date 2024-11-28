@@ -9,16 +9,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 @Component
 public class CsvParser extends FileParser {
 
     @Override
-    public List<DataRow> parse(DataRowValidator validator, InputStream input) throws IOException {
-        List<DataRow> dataRows = new ArrayList<>();
+    public void parse(DataRowValidator validator, InputStream input) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(input))) {
             String line;
             int index = 0;
@@ -29,11 +26,9 @@ public class CsvParser extends FileParser {
                 if (index == 0) {
                     skuIndex = Arrays.stream(data).map(String::toLowerCase).toList().indexOf("sku");
                 }
-                dataRows.add(new DataRow(Arrays.asList(data), index, skuIndex));
-                validator.validateRow(dataRows.get(index));
+                validator.validateRow(new DataRow(Arrays.asList(data), index, skuIndex));
                 index++;
             }
         }
-        return dataRows;
     }
 }

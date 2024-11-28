@@ -2,35 +2,34 @@ package ru.roe.pff.service;
 
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
+import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.entity.FileRequest;
+import ru.roe.pff.enums.FileRequestType;
+import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.files.csv.CsvParser;
-import ru.roe.pff.processing.DataRow;
+import ru.roe.pff.files.xlsx.XlsxParser;
 import ru.roe.pff.processing.DataRowValidator;
 import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 import ru.roe.pff.repository.FileRequestRepository;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FileProcessingService {
@@ -41,7 +40,7 @@ public class FileProcessingService {
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
 
-    private final Queue<FileLinkDto> queue = new LinkedList<>();
+    private final Queue<Object> queue = new LinkedList<>();
 
     @PostConstruct
     public void init() {
@@ -58,44 +57,102 @@ public class FileProcessingService {
     @Scheduled(fixedRate = 1000)
     public void processFiles() {
         if (!queue.isEmpty()) {
-            String fileLink = queue.poll();
-            executorService.submit(() -> {
-                try {
-                    processFile(fileRequest);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            });
+            var obj = queue.poll();
+            try {
+                processQueueElem(obj);
+            } catch (IOException | URISyntaxException e) {
+                log.error("Error while submitting: ", e);
+            }
+//            executorService.submit(() -> {
+//                try {
+//                    processQueueElem(obj);
+//                } catch (IOException | URISyntaxException e) {
+//                    log.error("Error while submitting: ", e);
+//                }
+//            });
         }
     }
 
-    public void addLinkToQueue(FileLinkDto file) {
+    private void processQueueElem(Object obj) throws IOException, URISyntaxException {
+        if (obj instanceof MultipartFile mf) {
+            processFile(mf);
+        } else if (obj instanceof FileLinkDto linkDto) {
+            processLink(linkDto.link());
+        }
+    }
+
+    public void addToQueue(Object file) {
         queue.add(file);
     }
-    
+
     private void processLink(String link) throws IOException, URISyntaxException {
         var url = new URI(link).toURL();
         ReadableByteChannel rbc = Channels.newChannel(url.openStream());
 
-        try (var fileOutputStream = new FileOutputStream(link)) {
+        log.debug("Accepted file link. Downloading...");
+
+        var safeFileName = link.substring(link.indexOf("://") + 3)
+                .replaceAll("[<>:\"/|?*]", "_");
+        var filePath = "temp_file_" + safeFileName;
+        try (var fileOutputStream = new FileOutputStream(filePath)) {
             var fileChannel = fileOutputStream.getChannel();
             fileChannel.transferFrom(rbc, 0, Long.MAX_VALUE);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
 
-        FileChannel fileChannel = fileOutputStream.getChannel();
+        log.debug("File downloaded and saved to: {}", filePath);
+        log.debug("Uploading file to MinIO...");
+
+        var file = new File(filePath);
+        try (var fileInputStream = new FileInputStream(file)) {
+            var fileName = "file_link_" + link;
+            minioService.uploadFile(fileName, fileInputStream);
+
+            proceedProcessing(fileInputStream, fileName);
+        }
     }
 
-//    private void processFile(FileRequest fileRequest) throws IOException {
-//        // Получение файла из MinIO
-//        InputStream fileStream = minioService.getFile(fileRequest.getFile().getFileName());
-//        // Определение типа файла
-//        String fileType = getFileExtension(fileRequest.getFile().getFileName());
-//        // Получение парсера по типу файла
-//        FileParser parser = getParser(fileType);
-//
-//        DataRowValidator validator = new DataRowValidator(fileRequest, fileErrorRepository);
-//        List<DataRow> dataRows = parser.parse(validator, fileStream);
-//    }
+    public void processFile(MultipartFile mf) throws IOException {
+        if (mf.getOriginalFilename() == null) {
+            throw new ApiException("No filename was provided");
+        }
+
+        log.debug("Accepted multipart file: {}", mf.getOriginalFilename());
+        log.debug("Uploading file to MinIO...");
+
+        var fileName = mf.getOriginalFilename();
+        minioService.uploadFile(fileName, mf);
+
+        proceedProcessing(mf.getInputStream(), fileName);
+//        executorService.submit(() -> {
+//            try {
+//                proceedProcessing(mf.getInputStream(), fileName);
+//            } catch (IOException e) {
+//                log.error("Error while submitting: ", e);
+//            }
+//        });
+    }
+
+    private void proceedProcessing(InputStream is, String fileName) throws IOException {
+        log.debug("Processing file: {}", fileName);
+
+        var fileType = getFileExtension(fileName);
+        var fileRequest = createRequest(fileName);
+        var parser = getParser(fileType);
+
+        var validator = new DataRowValidator(fileRequest, fileErrorRepository);
+        parser.parse(validator, is);
+
+        log.debug("Processed and parsed file: {}", fileName);
+    }
+
+    private FileRequest createRequest(String fileName) {
+        var feedFile = new FeedFile(null, fileName);
+        var fileRequest = new FileRequest(null, feedFile, List.of(), FileRequestType.UPLOADED);
+        fileRequestRepository.save(fileRequest);
+        return fileRequest;
+    }
 
     private String getFileExtension(String fileName) {
         return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
@@ -104,6 +161,7 @@ public class FileProcessingService {
     private FileParser getParser(String fileType) {
         return switch (fileType) {
             case "csv" -> new CsvParser();
+            case "xlsx" -> new XlsxParser();
             //case "json" -> new JsonParser();
             //case "xml" -> new XmlParser();
             default -> throw new IllegalArgumentException("Unsupported file type: " + fileType);

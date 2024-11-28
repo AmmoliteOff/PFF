@@ -18,7 +18,7 @@ public class FileRequest {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @OneToOne
+    @OneToOne(cascade = CascadeType.ALL)
     private FeedFile file;
 
     @OneToMany

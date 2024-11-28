@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.exception.ApiException;
 
+import java.io.FileInputStream;
 import java.io.InputStream;
 
 @Slf4j
@@ -17,7 +18,7 @@ public class MinioObjectStorage {
 
     private final MinioClient minioClient;
 
-    public static final String DEFAULT_BUCKET_NAME = "PFF";
+    public static final String DEFAULT_BUCKET_NAME = "pff-bucket";
 
     public boolean exists(String bucket, String objName) {
         try {
@@ -35,6 +36,21 @@ public class MinioObjectStorage {
         }
     }
 
+    public void upload(String bucket, String objName, FileInputStream fis) {
+        try {
+            final var poa = PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objName)
+                    .stream(fis, fis.getChannel().size(), -1)
+                    .build();
+            minioClient.putObject(poa);
+            log.debug("File uploaded to Minio: {}", poa);
+        } catch (Exception e) {
+            log.error("Error while uploading the file: ", e);
+            throw new ApiException("Error while uploading the file.");
+        }
+    }
+
     public void upload(String bucket, String objName, MultipartFile mf) {
         try {
             final var resource = mf.getResource();
@@ -45,6 +61,7 @@ public class MinioObjectStorage {
                     .contentType(mf.getContentType())
                     .build();
             minioClient.putObject(poa);
+            log.debug("File uploaded to Minio: {}", poa);
         } catch (Exception e) {
             log.error("Error while uploading the file: ", e);
             throw new ApiException("Error while uploading the file.");
