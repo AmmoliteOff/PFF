@@ -21,6 +21,10 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 
 @Service
@@ -185,7 +189,7 @@ public class FileProcessingService { //TODO добавить и проверит
                 types = CsvColumnTypeDetector.getColumnTypes(Arrays.asList(data));
             }
 
-            row.setElements(Arrays.asList(data), types);
+            row.setElements(cast(types, Arrays.asList(data)), types);
             row.setIndex(internalIndex++);
 
 
@@ -228,4 +232,60 @@ public class FileProcessingService { //TODO добавить и проверит
         return elements;
     }
 
+    private List<Object> cast(List<Class<?>> types, List<Object> elements) {
+        var result = new ArrayList<>();
+        for (int i = 0; i < types.size(); i++) {
+            var expectedType = types.get(i);
+            var element = elements.get(i);
+            if (expectedType == String.class) {
+                result.add(expectedType.cast(element)); // Строка не требует преобразования
+            }
+
+            if (expectedType == Double.class && element instanceof String) {
+                try {
+                    result.add(Double.parseDouble((String) element));
+                } catch (NumberFormatException e) {
+                    return null; // TODO техническая ошибка - значение не совпадает с ожидаемым типом
+                }
+            }
+
+            if (expectedType == Integer.class && element instanceof String) {
+                try {
+                    result.add(expectedType.cast(Integer.parseInt((String) element)));
+                } catch (NumberFormatException e) {
+                    return null; // TODO техническая ошибка - значение не совпадает с ожидаемым типом
+                }
+            }
+
+            if (expectedType == Boolean.class && element instanceof String) {
+                result.add(expectedType.cast(Boolean.parseBoolean((String) element)));
+            }
+
+            if (expectedType == LocalDate.class && element instanceof String) {
+                try {
+                    result.add(expectedType.cast(LocalDate.parse((String) element)));
+                } catch (DateTimeParseException e) {
+                    return null; // TODO техническая ошибка - значение не совпадает с ожидаемым типом
+                }
+            }
+
+            if (expectedType == LocalTime.class && element instanceof String) {
+                try {
+                    result.add(expectedType.cast(LocalTime.parse((String) element)));
+                } catch (DateTimeParseException e) {
+                    return null; // TODO техническая ошибка - значение не совпадает с ожидаемым типом
+                }
+            }
+
+            if (expectedType == LocalDateTime.class && element instanceof String) {
+                try {
+                    result.add(expectedType.cast(LocalDateTime.parse((String) element)));
+                } catch (DateTimeParseException e) {
+                    return null; // TODO техническая ошибка - значение не совпадает с ожидаемым типом
+                }
+            }
+            result.add(expectedType.cast(element));
+        }
+        return result;
+    }
 }
