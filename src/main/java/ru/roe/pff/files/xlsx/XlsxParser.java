@@ -18,14 +18,14 @@ import java.util.stream.IntStream;
 public class XlsxParser extends FileParser {
 
     @Override
-    public void parse(DataRowValidator validator, InputStream input) throws IOException {
+    public Integer parse(DataRowValidator validator, InputStream input) throws IOException {
+        int index = 0;
         IOUtils.setByteArrayMaxOverride(1000000000);
         try (XSSFWorkbook workbook = new XSSFWorkbook(input)) {
             var sheet = workbook.getSheetAt(0); // Считываем первый лист
             var rowIterator = sheet.iterator();
 
-            int index = 0;
-            int skuIndex = -1;
+            //int skuIndex = -1;
             int maxColumnsCount = sheet.getRow(0).getLastCellNum();
             while (rowIterator.hasNext()) {
                 var row = rowIterator.next();
@@ -44,13 +44,19 @@ public class XlsxParser extends FileParser {
 
                 if (index == 0) {
                     // Определяем индекс колонки с SKU в первой строке
-                    skuIndex = getSkuIndex(rowData);
+                    //skuIndex = getSkuIndex(rowData);
                 }
 
-                validator.validateRow(new DataRow(rowData, index, skuIndex));
+                validator.validateRow(new DataRow(rowData, index));
                 index++;
             }
         }
+        return index;
+    }
+
+    @Override
+    public List<DataRow> parseFrom(int begin, int end, InputStream input) throws IOException {
+        return List.of();
     }
 
     // Метод для получения значения ячейки в виде строки

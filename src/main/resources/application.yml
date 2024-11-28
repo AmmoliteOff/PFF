@@ -29,7 +29,7 @@ minio:
   password: minioadmin
   url: "http://localhost:9000"
   bucket-name: "pff-bucket"
-  
+
 application:
   llm:
     coverage: 0.3

@@ -16,7 +16,7 @@ public class FileError {
     private UUID id;
 
     @ManyToOne
-    private FileRequest fileRequest;
+    private FeedFile feedFile;
 
     @Column(nullable = false)
     private String error;

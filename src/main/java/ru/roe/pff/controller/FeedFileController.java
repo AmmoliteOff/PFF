@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FeedFileDto;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.dto.out.FeedFileResponseDto;
+import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.service.FileService;
 
 import java.util.List;
@@ -17,15 +18,6 @@ import java.util.UUID;
 @RequestMapping("/file")
 public class FeedFileController {
     private final FileService fileService;
-
-
-    public FeedFileResponseDto get(UUID uuid) {
-        return fileService.get(uuid);
-    }
-
-    public List<FeedFileResponseDto> getAll() {
-        return fileService.getAll();
-    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -39,11 +31,9 @@ public class FeedFileController {
         fileService.createFromLink(object);
     }
 
-    public FeedFileResponseDto update(UUID uuid, FeedFileDto object) {
-        return fileService.update(uuid, object);
+    @GetMapping("/{id}/{page}")
+    public List<DataRow> getDataRowsByPage(@PathVariable UUID id, @PathVariable Integer page){
+        return fileService.getDataRowsByPage(id, page);
     }
 
-    public void delete(UUID uuid) {
-        fileService.delete(uuid);
-    }
 }

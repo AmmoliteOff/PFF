@@ -1,6 +1,7 @@
 package ru.roe.pff.processing;
 
 import lombok.RequiredArgsConstructor;
+import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.entity.FileError;
 import ru.roe.pff.entity.FileRequest;
 import ru.roe.pff.enums.ErrorType;
@@ -13,7 +14,7 @@ import java.util.Set;
 
 @RequiredArgsConstructor
 public class DataRowValidator {
-    private final FileRequest fileRequest;
+    private final FeedFile feedFile;
     private final FileErrorRepository fileErrorRepository;
     private final Set<String> seenSkus = new HashSet<>();
     private final List<String> requiredTitles = new ArrayList<>() {{
@@ -27,13 +28,13 @@ public class DataRowValidator {
 
     public void validateRow(DataRow row) {
         if (row.getIndex() != 0) {
-            String sku = row.getData().get(row.getSkuColumnIndex());
+            //String sku = row.getData().get(row.getSkuColumnIndex());
 
-            if (sku != null) {
-                if (!seenSkus.add(sku)) {
-                    saveError("Duplicate SKU", ErrorType.LOGICAL, row.getIndex(), row.getSkuColumnIndex());
-                }
-            }
+//            if (sku != null) {
+//                if (!seenSkus.add(sku)) {
+//                    saveError("Duplicate SKU", ErrorType.LOGICAL, row.getIndex(), row.getSkuColumnIndex());
+//                }
+//            }
 
             for (var requiredTitle : requiredTitles) {
                 if (row.getData().get(titles.indexOf(requiredTitle)).equalsIgnoreCase("")) {
@@ -54,7 +55,7 @@ public class DataRowValidator {
 
     private void saveError(String error, ErrorType errorType, int rowIndex, int columnIndex) {
         FileError fileError = new FileError();
-        fileError.setFileRequest(fileRequest);
+        fileError.setFeedFile(feedFile);
         fileError.setError(error);
         fileError.setErrorType(errorType);
         fileError.setRowIndex(rowIndex);

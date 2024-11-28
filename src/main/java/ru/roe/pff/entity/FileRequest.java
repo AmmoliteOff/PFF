@@ -21,10 +21,7 @@ public class FileRequest {
     @OneToOne(cascade = CascadeType.ALL)
     private FeedFile file;
 
-    @OneToMany
-    private List<FileError> errors;
-
-    @Column
+    @Column(nullable = false)
     @Enumerated(value = EnumType.STRING)
     private FileRequestType type;
 }

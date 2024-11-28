@@ -8,5 +8,4 @@ import java.util.List;
 public class DataRow {
     private final List<String> data;
     private final int index;
-    private final int skuColumnIndex;
 }
