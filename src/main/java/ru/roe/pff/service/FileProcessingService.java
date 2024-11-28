@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.entity.FileRequest;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.files.csv.CsvParser;
@@ -13,8 +14,18 @@ import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 import ru.roe.pff.repository.FileRequestRepository;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -30,7 +41,7 @@ public class FileProcessingService {
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
 
-    private final Queue<FileRequest> queue = new LinkedList<>();
+    private final Queue<FileLinkDto> queue = new LinkedList<>();
 
     @PostConstruct
     public void init() {
@@ -47,7 +58,7 @@ public class FileProcessingService {
     @Scheduled(fixedRate = 1000)
     public void processFiles() {
         if (!queue.isEmpty()) {
-            FileRequest fileRequest = queue.poll();
+            String fileLink = queue.poll();
             executorService.submit(() -> {
                 try {
                     processFile(fileRequest);
@@ -58,21 +69,33 @@ public class FileProcessingService {
         }
     }
 
-    public void addFileToQueue(FileRequest file) {
+    public void addLinkToQueue(FileLinkDto file) {
         queue.add(file);
     }
+    
+    private void processLink(String link) throws IOException, URISyntaxException {
+        var url = new URI(link).toURL();
+        ReadableByteChannel rbc = Channels.newChannel(url.openStream());
 
-    private void processFile(FileRequest fileRequest) throws IOException {
-        // Получение файла из MinIO
-        InputStream fileStream = minioService.getFile(fileRequest.getFile().getFileName());
-        // Определение типа файла
-        String fileType = getFileExtension(fileRequest.getFile().getFileName());
-        // Получение парсера по типу файла
-        FileParser parser = getParser(fileType);
+        try (var fileOutputStream = new FileOutputStream(link)) {
+            var fileChannel = fileOutputStream.getChannel();
+            fileChannel.transferFrom(rbc, 0, Long.MAX_VALUE);
+        }
 
-        DataRowValidator validator = new DataRowValidator(fileRequest, fileErrorRepository);
-        List<DataRow> dataRows = parser.parse(validator, fileStream);
+        FileChannel fileChannel = fileOutputStream.getChannel();
     }
+
+//    private void processFile(FileRequest fileRequest) throws IOException {
+//        // Получение файла из MinIO
+//        InputStream fileStream = minioService.getFile(fileRequest.getFile().getFileName());
+//        // Определение типа файла
+//        String fileType = getFileExtension(fileRequest.getFile().getFileName());
+//        // Получение парсера по типу файла
+//        FileParser parser = getParser(fileType);
+//
+//        DataRowValidator validator = new DataRowValidator(fileRequest, fileErrorRepository);
+//        List<DataRow> dataRows = parser.parse(validator, fileStream);
+//    }
 
     private String getFileExtension(String fileName) {
         return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();

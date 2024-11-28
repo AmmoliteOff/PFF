@@ -2,8 +2,8 @@ spring:
   application:
     name: Product Feed Fixer
   datasource:
-    url: jdbc:postgresql://localhost:5678/pff
-    password: P0sTgR3SsS!
+    url: jdbc:postgresql://localhost:5432/pff
+    password: postgres
     username: postgres
     driver-class-name: org.postgresql.Driver
   jpa:

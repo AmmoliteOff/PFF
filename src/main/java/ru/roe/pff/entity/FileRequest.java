@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import ru.roe.pff.enums.FileRequestType;
 
 import java.util.List;
 import java.util.UUID;
@@ -22,4 +23,8 @@ public class FileRequest {
 
     @OneToMany
     private List<FileError> errors;
+
+    @Column
+    @Enumerated(value = EnumType.STRING)
+    private FileRequestType type;
 }
