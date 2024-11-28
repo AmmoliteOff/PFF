@@ -20,6 +20,7 @@ import ru.roe.pff.repository.FileRepository;
 import ru.roe.pff.repository.FileRequestRepository;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
@@ -87,29 +88,44 @@ public class FileProcessingService {
 
     private void processLink(String link) throws IOException, URISyntaxException {
         var url = new URI(link).toURL();
-        ReadableByteChannel rbc = Channels.newChannel(url.openStream());
 
-        log.debug("Accepted file link. Downloading...");
+        var connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod("HEAD");
+        int responseCode = connection.getResponseCode();
 
-        var safeFileName = link.substring(link.indexOf("://") + 3)
-                .replaceAll("[<>:\"/|?*]", "_");
-        var filePath = "temp_file_" + safeFileName;
-        try (var fileOutputStream = new FileOutputStream(filePath)) {
-            var fileChannel = fileOutputStream.getChannel();
-            fileChannel.transferFrom(rbc, 0, Long.MAX_VALUE);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            throw new IOException("Failed to access link: " + link + " - Response Code: " + responseCode);
         }
 
-        log.debug("File downloaded and saved to: {}", filePath);
-        log.debug("Uploading file to MinIO...");
+        try (ReadableByteChannel rbc = Channels.newChannel(url.openStream())) {
+            log.debug("Accepted file link. Downloading...");
 
-        var file = new File(filePath);
-        try (var fileInputStream = new FileInputStream(file)) {
-            var fileName = "file_link_" + link;
-            minioService.uploadFile(fileName, fileInputStream);
+            var sub = link.substring(link.indexOf("://") + 3)
+                    .replaceAll("[<>:\"/|*]", "_");
+            var safeFileName = sub.substring(0, sub.lastIndexOf('?'));
 
-            proceedProcessing(fileInputStream, fileName);
+            var tempFilePath = "temp_file_" + safeFileName;
+            try (var fileOutputStream = new FileOutputStream(tempFilePath)) {
+                var fileChannel = fileOutputStream.getChannel();
+                fileChannel.transferFrom(rbc, 0, Long.MAX_VALUE);
+            }
+
+            log.debug("File downloaded and saved to: {}", tempFilePath);
+            log.debug("Uploading file to MinIO...");
+
+            var file = new File(tempFilePath);
+            var fileName = "file_link_" + safeFileName;
+            // TODO: refactor -> maybe dont open stream twice...
+            try (var fileInputStream = new FileInputStream(file)) {
+                minioService.uploadFile(fileName, fileInputStream);
+            }
+            try (var fileInputStream = new FileInputStream(file)) {
+                proceedProcessing(fileInputStream, fileName);
+            }
+            file.delete();
+        } catch (IOException e) {
+            log.error("Error during file download or upload: ", e);
+            throw e;
         }
     }
 
