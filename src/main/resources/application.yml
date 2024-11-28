@@ -1,4 +1,7 @@
 spring:
+  llm:
+    uri: gpt://b1gs02efi9ecn1ih2v9r/yandexgpt/latest
+    oAuthToken: y0_AgAAAAAXLrNhAATuwQAAAAEaPIoxAABqS2O6cN1DF5PNS3DhknWVUMNXvg
   application:
     name: Product Feed Fixer
   datasource:
@@ -12,3 +15,6 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+application:
+  llm:
+    coverage: 0.3
