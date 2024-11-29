@@ -6,7 +6,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import ru.roe.pff.repository.FeedFileLinkRepository;
-import ru.roe.pff.repository.FileRepository;
 import ru.roe.pff.service.FileProcessingService;
 
 @Slf4j
@@ -14,14 +13,13 @@ import ru.roe.pff.service.FileProcessingService;
 @RequiredArgsConstructor
 public class FeedFileUpdateScheduler {
 
-    private final FileRepository fileRepository;
     private final FeedFileLinkRepository linkRepository;
     private final FileProcessingService processingService;
-
 
     @Scheduled(cron = "0 0 */3 * * *")
     @Transactional
     public void handleUpdateByLink() {
+        log.debug("Auto-updating the feed file by saved link...");
         var links = linkRepository.findAll();
         if (links.isEmpty()) {
             log.debug("No links found to auto-update => skipping");

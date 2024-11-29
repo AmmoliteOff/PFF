@@ -3,11 +3,11 @@ package ru.roe.pff.service;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.exception.ApiException;
-import ru.roe.pff.files.FileParser;
 import ru.roe.pff.files.xml.XmlGenerator;
 import ru.roe.pff.files.xml.XmlParser;
 import ru.roe.pff.processing.DataRow;
@@ -15,20 +15,25 @@ import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.net.SocketException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.LocalDateTime;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FileProcessingService {
+
+    private final static int VERIFY_LINK_TIMEOUT_MILLIS = 5000;
 
     private final FileErrorRepository fileErrorRepository;
     private final MinioService minioService;
@@ -38,25 +43,32 @@ public class FileProcessingService {
     private final XmlParser xmlParser;
     private final XmlGenerator xmlGenerator;
 
-    public void submitLinkToProcess(String link) {
-        try {
-            executorService.submit(() -> processLink(link)).get();
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof SocketException) {
-                log.error("Could not connect to the provided link: {}", link, e);
-            } else {
-                log.error("Error processing executor task: ", e);
+    private final Queue<Runnable> taskQueue = new LinkedList<>();
+
+    @Scheduled(fixedRate = 1000)
+    private void processTaskQueue() {
+        if (!taskQueue.isEmpty()) {
+            var task = taskQueue.poll();
+            try {
+                log.debug("Submitting task...");
+                executorService.submit(task).get();
+            } catch (Exception e) {
+                switch (e.getCause()) {
+                    case SocketException se -> log.error("Could not connect to the provided link", se);
+                    case null, default -> log.error("Error processing executor task: ", e);
+                }
             }
-        } catch (Exception e) {
-            log.error("Error processing executor task: ", e);
         }
     }
 
+    public void submitLinkToProcess(String link) {
+        verifyLinkIsAccessible(link);
+        taskQueue.add(() -> processLink(link));
+    }
+
     public List<DataRow> getFrom(FeedFile feedFile, Integer begin, Integer end) {
-        String fileType = "xml";
-        FileParser parser = getParser(fileType);
         try (InputStream is = minioService.getFile(feedFile.getFileName())) {
-            return parser.parseFrom(begin, end, is);
+            return xmlParser.parseFrom(begin, end, is);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -67,15 +79,16 @@ public class FileProcessingService {
     public void generateFixedFile(UUID fileId) {
         var feedFile = fileRepository.findById(fileId).orElseThrow();//todo
         var is = minioService.getFile(feedFile.getFileName());
-        var parser = getParser(getFileExtension(feedFile.getFileName()));
-        var dataRows = parser.parseFrom(0, feedFile.getRowsCount(), is);
+
+        var dataRows = xmlParser.parseFrom(0, feedFile.getRowsCount(), is);
         var errors = fileErrorRepository.findAllByFeedFile(feedFile);
+
         for (var error : errors) {
             // todo: check `error solve` for null vals
             var row = dataRows.get(error.getRowIndex()).getData();
             row.set(error.getColumnIndex(), error.getErrorSolve().getValue());
         }
-        saveNewXml(dataRows, "fixed_" + feedFile.getFileName());
+        xmlGenerator.saveNewXml(dataRows, "fixed_" + feedFile.getFileName());
     }
 
     void processFile(MultipartFile mf, String fileName, UUID fileId) {
@@ -84,27 +97,21 @@ public class FileProcessingService {
         }
 
         uploadFileToMinio(mf, fileName);
-
-        try {
-            executorService.submit(() -> {
-                try (InputStream is = mf.getInputStream()) {
-                    proceedProcessing(is, fileName, fileId);
-                } catch (IOException e) {
-                    log.error("Error processing file: ", e);
-                }
-            }).get();
-        } catch (Exception e) {
-            log.error("Error processing file: ", e);
-        }
-    }
-
-    private void saveNewXml(List<DataRow> dataRows, String fileName) {
-        xmlGenerator.saveNewXml(dataRows, fileName);
+        taskQueue.add(() -> {
+            try (InputStream is = mf.getInputStream()) {
+                proceedProcessing(is, fileName, fileId);
+            } catch (IOException e) {
+                log.error("Error processing file: ", e);
+            }
+        });
     }
 
     @SneakyThrows
     private void processLink(String link) {
         URI uri = new URI(link);
+
+        // TODO: Handle deleting temp file!
+
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
             safeFileName = getSafeFileName(LocalDateTime.now() + "_" + safeFileName);
@@ -124,6 +131,18 @@ public class FileProcessingService {
         }
     }
 
+    public void proceedProcessing(InputStream is, String fileName, UUID fileId) {
+        log.debug("Processing file: {}", fileName);
+
+        FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
+        int rowsCount = xmlParser.parse(feedFile.getId(), is);
+        feedFile = fileRepository.findById(fileId).orElseThrow();
+        feedFile.setRowsCount(rowsCount);
+        fileRepository.save(feedFile);
+
+        log.debug("Processed and parsed file: {}", fileName);
+    }
+
     private void uploadFileToMinio(MultipartFile mf, String fileName) {
         log.debug("Uploading file to MinIO: {}", fileName);
         minioService.uploadFile(fileName, mf);
@@ -134,6 +153,8 @@ public class FileProcessingService {
         try (FileOutputStream fos = new FileOutputStream(fileName)) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
             minioService.uploadFile(fileName, new FileInputStream(fileName));
+        } finally {
+            new File(fileName).delete();
         }
     }
 
@@ -144,29 +165,21 @@ public class FileProcessingService {
         return lastIndex != -1 ? sub.substring(0, lastIndex) : sub;
     }
 
-    public void proceedProcessing(InputStream is, String fileName, UUID fileId) {
-        log.debug("Processing file: {}", fileName);
-
-        String fileType = "xml";
-        FileParser parser = getParser(fileType);
-
-        FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
-        int rowsCount = parser.parse(feedFile.getId(), is);
-        feedFile = fileRepository.findById(fileId).orElseThrow();
-        feedFile.setRowsCount(rowsCount);
-        fileRepository.save(feedFile);
-
-        log.debug("Processed and parsed file: {}", fileName);
+    private void verifyLinkIsAccessible(String link) {
+        log.debug("Verifying provided link... ({})", link);
+        try {
+            var url = new URI(link).toURL();
+            var connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setConnectTimeout(VERIFY_LINK_TIMEOUT_MILLIS);
+            connection.setReadTimeout(VERIFY_LINK_TIMEOUT_MILLIS);
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                throw new ApiException("Provided link is unreachable: " + link);
+            }
+            log.debug("Link verified: {}", link);
+        } catch (URISyntaxException | IOException e) {
+            throw new ApiException("Provided link is unreachable: " + link);
+        }
     }
 
-    private String getFileExtension(String fileName) {
-        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
-    }
-
-    private FileParser getParser(String fileType) {
-        return switch (fileType) {
-            case "xml" -> xmlParser;
-            default -> throw new IllegalArgumentException("Unsupported file type: " + fileType);
-        };
-    }
 }
