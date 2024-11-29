@@ -21,7 +21,7 @@ public class DataRowValidator {
     @Transactional
     public List<FileError> validateRow(DataRow row, List<String> titles) {
         fileErrorsBatch.clear();
-        for (int i = 0; i < row.getData().size(); i++) {
+        for (int i = 1; i < row.getData().size(); i++) {
             String columnName = titles.get(i);
             String cellValue = row.getData().get(i);
 

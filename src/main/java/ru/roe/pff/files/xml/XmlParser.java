@@ -80,6 +80,7 @@ public class XmlParser extends FileParser {
     @Override
     public List<DataRow> parseFrom(int begin, int end, InputStream input){
         List<DataRow> dataRows = new ArrayList<>();
+        dataRows.add(new DataRow(getColumnNames(), -1));
         try {
             SAXParser parser = SAXParserFactory.newInstance().newSAXParser();
             SaxHandler handler = new SaxHandler(begin, end, dataRows);
@@ -191,7 +192,7 @@ public class XmlParser extends FileParser {
                     currentParamName = null;
                 } else if (qName.equals("offer")) {
                     if (currentRow >= begin && currentRow <= end) {
-                        DataRow dataRow = new DataRow(currentFields, currentRow);
+                        DataRow dataRow = new DataRow(currentFields, currentRow-1);
                         dataRows.add(dataRow);
                     }
                     insideOffer = false;
