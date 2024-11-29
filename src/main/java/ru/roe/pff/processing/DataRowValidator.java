@@ -1,26 +1,26 @@
 package ru.roe.pff.processing;
 
 import lombok.RequiredArgsConstructor;
-import ru.roe.pff.entity.FeedFile;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import ru.roe.pff.entity.FileError;
 import ru.roe.pff.enums.ErrorType;
-import ru.roe.pff.repository.FileErrorRepository;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @RequiredArgsConstructor
+@Component
 public class DataRowValidator {
-    private final FeedFile feedFile;
-    private final FileErrorRepository fileErrorRepository;
-    private List<String> titles;
-
-    private static final int ERROR_BATCH_SIZE = 10;
     private final List<FileError> fileErrorsBatch = new ArrayList<>();
-
+    private static final int ERROR_BATCH_SIZE = 10;
     private long lastParsedId = 0;
 
-    public void validateRow(DataRow row, List<String> titles) {
+    @Transactional
+    public List<FileError> validateRow(DataRow row, List<String> titles) {
+        fileErrorsBatch.clear();
         for (int i = 0; i < row.getData().size(); i++) {
             String columnName = titles.get(i);
             String cellValue = row.getData().get(i);
@@ -35,7 +35,6 @@ public class DataRowValidator {
                 continue;
             }
 
-            // todo: пока считаем, что всегда есть ID столбец
             if (columnName.equalsIgnoreCase("id")) {
                 validatePrimaryId(row, cellValue, columnName, i);
                 continue;
@@ -49,7 +48,7 @@ public class DataRowValidator {
                 validateNumericValue(row, cellValue, columnName, i);
             }
         }
-        saveBatch();
+        return fileErrorsBatch;
     }
 
     protected boolean isNumericValue(String cellValue) {
@@ -61,7 +60,6 @@ public class DataRowValidator {
         }
     }
 
-    // TODO: в xml другие проперти
     protected boolean isAdditionalIdColumn(String columnName) {
         return List.of("внешний id", "sku", "uuid", "артикул").contains(columnName);
     }
@@ -134,24 +132,15 @@ public class DataRowValidator {
     }
 
     protected void validateAdditionalId(DataRow row, String cellValue, String columnName, int columnIndex) {
-        // todo: might somehow check for duplicates => hash map?
+        // Additional validation logic can be added here
     }
 
     protected void addErrorToBatch(String error, ErrorType errorType, int rowIndex, int columnIndex) {
-        if (fileErrorsBatch.size() >= ERROR_BATCH_SIZE) {
-            saveBatch();
-        }
         FileError fileError = new FileError();
-        fileError.setFeedFile(feedFile);
         fileError.setError(error);
         fileError.setErrorType(errorType);
         fileError.setRowIndex(rowIndex);
         fileError.setColumnIndex(columnIndex);
         fileErrorsBatch.add(fileError);
-    }
-
-    protected void saveBatch() {
-        fileErrorRepository.saveAll(fileErrorsBatch);
-        fileErrorsBatch.clear();
     }
 }

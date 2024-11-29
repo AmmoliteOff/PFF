@@ -25,17 +25,13 @@ public class FileService {
     private final FileRepository fileRepository;
 
     public void createFromFile(MultipartFile file) {
-        try {
-            // TODO: proceed processing ASYNC!
-            var fileName = file.getOriginalFilename();
-            fileName = getSafeFileName(LocalDateTime.now() +"_"+ fileName);
-            var feedFile = new FeedFile(null, fileName, 0);
-            feedFile = fileRepository.save(feedFile);
-            fileProcessingService.processFile(file, fileName, feedFile.getId());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-//        fileProcessingService.addToQueue(file);
+        // TODO: proceed processing ASYNC!
+        var fileName = file.getOriginalFilename();
+        fileName = getSafeFileName(LocalDateTime.now() +"_"+ fileName);
+        var feedFile = new FeedFile(null, fileName, 0);
+        feedFile = fileRepository.save(feedFile);
+        fileProcessingService.processFile(file, fileName, feedFile.getId());
+        //        fileProcessingService.addToQueue(file);
     }
 
     public void createFromLink(FileLinkDto object) {

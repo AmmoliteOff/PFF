@@ -15,13 +15,13 @@ public class FileError {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne(cascade = CascadeType.ALL)
+    @ManyToOne(cascade = CascadeType.MERGE)
     private FeedFile feedFile;
 
     @Column(nullable = false)
     private String error;
 
-    @OneToOne
+    @OneToOne(cascade = CascadeType.MERGE)
     private ErrorSolve errorSolve;
 
     @Column

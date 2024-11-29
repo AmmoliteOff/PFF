@@ -1,18 +1,32 @@
 package ru.roe.pff.files.xml;
 
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
+import ru.roe.pff.entity.FeedFile;
+import ru.roe.pff.entity.FileError;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.processing.DataRowValidator;
+import ru.roe.pff.repository.FileErrorRepository;
+import ru.roe.pff.repository.FileRepository;
 
+import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
+@Component
+@RequiredArgsConstructor
 public class XmlParser extends FileParser {
+    private final DataRowValidator dataRowValidator;
+    private final FileErrorRepository fileErrorRepository;
 
     private static final String[] fieldOrder = {
         "id",
@@ -39,26 +53,39 @@ public class XmlParser extends FileParser {
             fieldMap.put(fieldOrder[i], i);
         }
     }
+
+    private final FileRepository fileRepository;
+
     @Override
-    public Integer parse(DataRowValidator dataRowValidator, InputStream input) throws IOException {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Integer parse(UUID fileId, InputStream input){
+        List<FileError> errors = new ArrayList<>();
         List<DataRow> dataRows = parseFrom(0, Integer.MAX_VALUE, input);
         int validCount = 0;
         for (DataRow row : dataRows) {
-            dataRowValidator.validateRow(row, getColumnNames());
+            var rowErrors = dataRowValidator.validateRow(row, getColumnNames());
             validCount++;
+            errors.addAll(rowErrors);
         }
+        var feedFile = fileRepository.findById(fileId).orElseThrow();
+        errors.forEach(value->value.setFeedFile(feedFile));
+        saveAllErrors(errors);
         return validCount;
     }
 
+    private void saveAllErrors(List<FileError> errors) {
+        fileErrorRepository.saveAll(errors);
+    }
+
     @Override
-    public List<DataRow> parseFrom(int begin, int end, InputStream input) throws IOException {
+    public List<DataRow> parseFrom(int begin, int end, InputStream input){
         List<DataRow> dataRows = new ArrayList<>();
         try {
             SAXParser parser = SAXParserFactory.newInstance().newSAXParser();
             SaxHandler handler = new SaxHandler(begin, end, dataRows);
             parser.parse(input, handler);
-        } catch (Exception e) {
-            throw new IOException("SAX parsing error", e);
+        } catch (IOException | ParserConfigurationException | SAXException e) {
+            System.out.println(e.getMessage());
         }
         return dataRows;
     }
@@ -177,7 +204,9 @@ public class XmlParser extends FileParser {
 
         private void setField(String fieldName, String value) {
             if (insideOffer && currentFields != null && fieldMap.containsKey(fieldName)) {
-                currentFields.set(fieldMap.get(fieldName), value);
+                if (value != null) {
+                    currentFields.set(fieldMap.get(fieldName), value);
+                }
             }
         }
     }

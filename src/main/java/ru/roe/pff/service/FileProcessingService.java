@@ -7,24 +7,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.entity.FeedFile;
-import ru.roe.pff.entity.FileRequest;
-import ru.roe.pff.enums.FileRequestType;
 import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.files.xml.XmlGenerator;
 import ru.roe.pff.files.xml.XmlParser;
 import ru.roe.pff.processing.DataRow;
-import ru.roe.pff.processing.DataRowValidator;
 import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
-import ru.roe.pff.repository.FileRequestRepository;
 
 import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.LinkedList;
 import java.util.List;
@@ -39,23 +34,24 @@ public class FileProcessingService {
 
     private final FileErrorRepository fileErrorRepository;
     private final MinioService minioService;
-    private final FileRequestRepository fileRequestRepository;
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
 
     private final Queue<Object> queue = new LinkedList<>();
+    private final XmlParser xmlParser;
 
     @Scheduled(fixedRate = 1000)
     public void processFiles() {
         if (!queue.isEmpty()) {
             var obj = queue.poll();
-            executorService.submit(() -> {
-                try {
+            try {
+                executorService.submit(() -> {
                     processQueueElement(obj);
-                } catch (IOException | URISyntaxException e) {
-                    log.error("Error processing file: ", e);
-                }
-            });
+                }).get();
+            }
+            catch (Exception e) {
+                log.error(e.getMessage(), e);
+            }
         }
     }
 
@@ -75,34 +71,33 @@ public class FileProcessingService {
         queue.add(file);
     }
 
-    private void processQueueElement(Object obj) throws IOException, URISyntaxException {
+    private void processQueueElement(Object obj) {
         if (obj instanceof FileLinkDto linkDto) {
-            processLink(linkDto.link());
+            try {
+                processLink(linkDto.link());
+            } catch (IOException | URISyntaxException e) {
+                log.error("Error processing link: ", e);
+            }
         }
 //        else if (obj instanceof MultipartFile mf) {
 //            processFile(mf);
 //        }
     }
 
-    public void generateFixedFile(UUID fileId){ //TODO сделать accept и обработку в фоне
+    public void generateFixedFile(UUID fileId) { //TODO сделать accept и обработку в фоне
         var feedFile = fileRepository.findById(fileId).orElseThrow();//todo
         var is = minioService.getFile(feedFile.getFileName());
         var parser = getParser(getFileExtension(feedFile.getFileName()));
-        try {
-            var dataRows = parser.parseFrom(0, feedFile.getRowsCount(), is);
-            var errors = fileErrorRepository.findAllByFeedFile(feedFile);
-            for(var error : errors) {
-                var row = dataRows.get(error.getRowIndex()).getData();
-                row.set(error.getErrorSolve().getColumnIndex(), error.getErrorSolve().getValue());
-            }
-            saveNewXml(dataRows, "fixed_"+feedFile.getFileName());
+        var dataRows = parser.parseFrom(0, feedFile.getRowsCount(), is);
+        var errors = fileErrorRepository.findAllByFeedFile(feedFile);
+        for (var error : errors) {
+            var row = dataRows.get(error.getRowIndex()).getData();
+            row.set(error.getColumnIndex(), error.getErrorSolve().getValue());
         }
-        catch (IOException e) {
-            //todo
-        }
+        saveNewXml(dataRows, "fixed_" + feedFile.getFileName());
     }
 
-    void processFile(MultipartFile mf, String fileName, UUID fileId) throws IOException {
+    void processFile(MultipartFile mf, String fileName, UUID fileId) {
         if (fileName == null) {
             throw new ApiException("No filename was provided");
         }
@@ -110,31 +105,38 @@ public class FileProcessingService {
         uploadFileToMinio(mf, fileName);
 
         // TODO: proceed processing ASYNC!
-        executorService.submit(() -> {
-            try (InputStream is = mf.getInputStream()) {
-                proceedProcessing(is, fileName, fileId);
-            } catch (IOException e) {
-                log.error("Error processing file: ", e);
-            }
-        });
+        try {
+            executorService.submit(() -> {
+                try (InputStream is = mf.getInputStream()) {
+                    proceedProcessing(is, fileName, fileId);
+                } catch (IOException e) {
+                    log.error("Error processing file: ", e);
+                }
+            }).get();
+        }
+        catch (Exception e) {
+            log.error("Error processing file: ", e);
+        }
     }
 
-    private void saveNewXml(List<DataRow> dataRows, String fileName){
+    private void saveNewXml(List<DataRow> dataRows, String fileName) {
         var generator = new XmlGenerator();
         generator.saveNewXml(dataRows, fileName);
     }
 
-    private void processLink(String link) throws IOException, URISyntaxException {
+    private void processLink(String link) throws URISyntaxException, IOException {
         URI uri = new URI(link);
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
-            safeFileName = getSafeFileName(LocalDateTime.now()+"_"+safeFileName);
+            safeFileName = getSafeFileName(LocalDateTime.now() + "_" + safeFileName);
             var feedFile = new FeedFile(null, safeFileName, 0);
             feedFile = fileRepository.save(feedFile);
             uploadFileToMinio(safeFileName, rbc);
 
             try (InputStream is = new FileInputStream(safeFileName)) {
                 proceedProcessing(is, safeFileName, feedFile.getId());
+            } catch (IOException e) {
+                log.error(e.getLocalizedMessage());
             } finally {
                 new File(safeFileName).delete();
             }
@@ -156,23 +158,21 @@ public class FileProcessingService {
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
-                .replaceAll("[<>:\"/|*]", "_");
+            .replaceAll("[<>:\"/|*]", "_");
         return sub.substring(0, sub.lastIndexOf('?'));
     }
 
-    private void proceedProcessing(InputStream is, String fileName, UUID fileId) throws IOException {
+    public void proceedProcessing(InputStream is, String fileName, UUID fileId){
         log.debug("Processing file: {}", fileName);
 
         String fileType = getFileExtension(fileName);
         FileParser parser = getParser(fileType);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
-        DataRowValidator validator = new DataRowValidator(feedFile, fileErrorRepository);
-        int rowsCount = parser.parse(validator, is);
+        int rowsCount = parser.parse(feedFile.getId(), is);
+        feedFile = fileRepository.findById(fileId).orElseThrow();
         feedFile.setRowsCount(rowsCount);
         fileRepository.save(feedFile);
-        FileRequest fileRequest = new FileRequest(null, feedFile, FileRequestType.UPLOADED);
-        fileRequestRepository.save(fileRequest);
 
         log.debug("Processed and parsed file: {}", fileName);
     }
@@ -183,7 +183,7 @@ public class FileProcessingService {
 
     private FileParser getParser(String fileType) {
         return switch (fileType) {
-            case "xml" -> new XmlParser();
+            case "xml" -> xmlParser;
             default -> throw new IllegalArgumentException("Unsupported file type: " + fileType);
         };
     }
