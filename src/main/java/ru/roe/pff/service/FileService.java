@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FeedFileDto;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.dto.out.FeedFileResponseDto;
+import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.repository.FileRepository;
 
@@ -38,10 +39,17 @@ public class FileService {
     public List<DataRow> getDataRowsByPage(UUID id, Integer page) {
         var feedFile = fileRepository.findById(id)
             .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id)));
-        var rowsCount = feedFile.getRowsCount();
-        var step = rowsCount/ELEMENTS_PER_PAGE;
-        var begin = (page-1) * step;
-        var end = page*step;
+        var begin = (page-1) * ELEMENTS_PER_PAGE;
+        var end = page * ELEMENTS_PER_PAGE;
         return fileProcessingService.getFrom(feedFile, begin, end);
+    }
+
+    public FeedFile getById(UUID id) {
+        return fileRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id)));
+    }
+
+    public List<FeedFile> getAll(){
+        return fileRepository.findAll();
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FeedFileDto;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.dto.out.FeedFileResponseDto;
+import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.service.FileService;
 
@@ -36,4 +37,13 @@ public class FeedFileController {
         return fileService.getDataRowsByPage(id, page);
     }
 
+    @GetMapping("/{id}")
+    public FeedFile get(@PathVariable UUID id) {
+        return fileService.getById(id);
+    }
+
+    @GetMapping
+    public List<FeedFile> getAll() {
+        return fileService.getAll();
+    }
 }
