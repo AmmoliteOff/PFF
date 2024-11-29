@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import ru.roe.pff.llm.client.YandexGptClient;
@@ -17,8 +18,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class LLMService {
@@ -32,6 +33,7 @@ public class LLMService {
     private final ObjectMapper objectMapper;
 
     public List<LlmWarnings> checkForTitleChange(List<DataRow> items) {
+        log.debug("Retrieving AI suggestions for {} items...", items.size());
         try {
             List<LlmWarnings> warnings = new ArrayList<>();
 
@@ -68,7 +70,8 @@ public class LLMService {
                 json = json.replaceAll("^```|```$", "");
 
                 Gson gson = new Gson();
-                Type listType = new TypeToken<List<LlmWarnings>>() {}.getType();
+                Type listType = new TypeToken<List<LlmWarnings>>() {
+                }.getType();
                 List<LlmWarnings> batchWarnings = gson.fromJson(json, listType);
                 warnings.addAll(batchWarnings);
 
@@ -76,8 +79,10 @@ public class LLMService {
                 requestCount++;
             }
 
+            log.debug("Retrieved {} AI suggestions", warnings.size());
             return warnings;
         } catch (Exception e) {
+            log.error("Error while retrieving AI suggestions", e);
             return List.of();
         }
     }

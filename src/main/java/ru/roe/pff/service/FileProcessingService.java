@@ -167,6 +167,7 @@ public class FileProcessingService {
                     null,
                     feedFile,
                     suggestion.getMessage(),
+                    "", // TODO: Добавить описание или тайтл!
                     new ErrorSolve(null, suggestion.getValue()),
                     ErrorType.AI,
                     suggestion.getRowIndex(),
