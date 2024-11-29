@@ -12,6 +12,8 @@ import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.repository.FileRepository;
 
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +27,11 @@ public class FileService {
     public void createFromFile(MultipartFile file) {
         try {
             // TODO: proceed processing ASYNC!
-            fileProcessingService.processFile(file);
+            var fileName = file.getOriginalFilename();
+            fileName = getSafeFileName(LocalDateTime.now() +"_"+ fileName);
+            var feedFile = new FeedFile(null, fileName, 0);
+            feedFile = fileRepository.save(feedFile);
+            fileProcessingService.processFile(file, fileName, feedFile.getId());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -49,7 +55,16 @@ public class FileService {
             .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id)));
     }
 
+    public void completeFile(UUID fileId){
+        fileProcessingService.generateFixedFile(fileId);
+    }
+
     public List<FeedFile> getAll(){
         return fileRepository.findAll();
+    }
+
+    private String getSafeFileName(String link) {
+        return link.substring(link.indexOf("://") + 3)
+            .replaceAll("[<>:\"/|*]", "_");
     }
 }

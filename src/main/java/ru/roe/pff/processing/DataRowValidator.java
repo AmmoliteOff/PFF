@@ -20,40 +20,36 @@ public class DataRowValidator {
 
     private long lastParsedId = 0;
 
-    public void validateRow(DataRow row) {
-        if (row.getIndex() == 0) {
-            titles = row.getData().stream().map(String::toLowerCase).toList();
-        } else {
-            for (int i = 0; i < row.getData().size(); i++) {
-                String columnName = titles.get(i);
-                String cellValue = row.getData().get(i);
+    public void validateRow(DataRow row, List<String> titles) {
+        for (int i = 0; i < row.getData().size(); i++) {
+            String columnName = titles.get(i);
+            String cellValue = row.getData().get(i);
 
-                if (cellValue.isEmpty()) {
-                    addErrorToBatch(
-                            "Empty cell found in column: " + columnName,
-                            ErrorType.TECHNICAL,
-                            row.getIndex(),
-                            i
-                    );
-                    continue;
-                }
-
-                // todo: пока считаем, что всегда есть ID столбец
-                if (columnName.equalsIgnoreCase("id")) {
-                    validatePrimaryId(row, cellValue, columnName, i);
-                    continue;
-                }
-
-                if (isAdditionalIdColumn(columnName)) {
-                    validateAdditionalId(row, cellValue, columnName, i);
-                }
-
-                if (isNumericValue(cellValue)) {
-                    validateNumericValue(row, cellValue, columnName, i);
-                }
+            if (cellValue.isEmpty()) {
+                addErrorToBatch(
+                    "Empty cell found in column: " + columnName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    i
+                );
+                continue;
             }
-            saveBatch();
+
+            // todo: пока считаем, что всегда есть ID столбец
+            if (columnName.equalsIgnoreCase("id")) {
+                validatePrimaryId(row, cellValue, columnName, i);
+                continue;
+            }
+
+            if (isAdditionalIdColumn(columnName)) {
+                validateAdditionalId(row, cellValue, columnName, i);
+            }
+
+            if (isNumericValue(cellValue)) {
+                validateNumericValue(row, cellValue, columnName, i);
+            }
         }
+        saveBatch();
     }
 
     protected boolean isNumericValue(String cellValue) {
@@ -75,34 +71,34 @@ public class DataRowValidator {
             double numericValue = Double.parseDouble(cellValue);
             if (numericValue < 0) {
                 addErrorToBatch(
-                        "Negative value found in column: " + columnName,
-                        ErrorType.TECHNICAL,
-                        row.getIndex(),
-                        columnIndex
+                    "Negative value found in column: " + columnName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    columnIndex
                 );
             }
             if (numericValue == 0 && columnName.contains("цена")) {
                 addErrorToBatch(
-                        "Invalid price value (0) in column: " + columnName,
-                        ErrorType.TECHNICAL,
-                        row.getIndex(),
-                        columnIndex
+                    "Invalid price value (0) in column: " + columnName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    columnIndex
                 );
             }
             if (numericValue >= 100.0 && columnName.contains("скидка")) {
                 addErrorToBatch(
-                        "Invalid discount value (>=100) in column: " + columnName,
-                        ErrorType.TECHNICAL,
-                        row.getIndex(),
-                        columnIndex
+                    "Invalid discount value (>=100) in column: " + columnName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    columnIndex
                 );
             }
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                    "Invalid numeric value in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                "Invalid numeric value in column: " + columnName,
+                ErrorType.TECHNICAL,
+                row.getIndex(),
+                columnIndex
             );
         }
     }
@@ -112,27 +108,27 @@ public class DataRowValidator {
             long parsedId = Long.parseLong(cellValue);
             if (parsedId <= 0) {
                 addErrorToBatch(
-                        "Invalid ID (<0) found: " + cellValue + " in column: " + columnName,
-                        ErrorType.TECHNICAL,
-                        row.getIndex(),
-                        columnIndex
+                    "Invalid ID (<0) found: " + cellValue + " in column: " + columnName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    columnIndex
                 );
             }
             if (lastParsedId >= parsedId) {
                 addErrorToBatch(
-                        "Duplicate ID found: " + cellValue + " in column: " + columnName,
-                        ErrorType.TECHNICAL,
-                        row.getIndex(),
-                        columnIndex
+                    "Duplicate ID found: " + cellValue + " in column: " + columnName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    columnIndex
                 );
             }
             lastParsedId = parsedId;
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                    "Invalid ID found: " + cellValue + " in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                "Invalid ID found: " + cellValue + " in column: " + columnName,
+                ErrorType.TECHNICAL,
+                row.getIndex(),
+                columnIndex
             );
         }
     }

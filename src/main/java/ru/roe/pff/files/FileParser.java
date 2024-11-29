@@ -12,5 +12,4 @@ public abstract class FileParser {
     public abstract Integer parse(DataRowValidator validator, InputStream input) throws IOException;
 
     public abstract List<DataRow> parseFrom(int begin, int end, InputStream input) throws IOException;
-
 }

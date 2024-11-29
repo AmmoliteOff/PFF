@@ -11,8 +11,8 @@ import ru.roe.pff.entity.FileRequest;
 import ru.roe.pff.enums.FileRequestType;
 import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.FileParser;
-import ru.roe.pff.files.csv.CsvParser;
-import ru.roe.pff.files.xlsx.XlsxParser;
+import ru.roe.pff.files.xml.XmlGenerator;
+import ru.roe.pff.files.xml.XmlParser;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.processing.DataRowValidator;
 import ru.roe.pff.repository.FileErrorRepository;
@@ -25,9 +25,11 @@ import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
 @Slf4j
@@ -82,8 +84,25 @@ public class FileProcessingService {
 //        }
     }
 
-    void processFile(MultipartFile mf) throws IOException {
-        String fileName = mf.getOriginalFilename();
+    public void generateFixedFile(UUID fileId){ //TODO сделать accept и обработку в фоне
+        var feedFile = fileRepository.findById(fileId).orElseThrow();//todo
+        var is = minioService.getFile(feedFile.getFileName());
+        var parser = getParser(getFileExtension(feedFile.getFileName()));
+        try {
+            var dataRows = parser.parseFrom(0, feedFile.getRowsCount(), is);
+            var errors = fileErrorRepository.findAllByFeedFile(feedFile);
+            for(var error : errors) {
+                var row = dataRows.get(error.getRowIndex()).getData();
+                row.set(error.getErrorSolve().getColumnIndex(), error.getErrorSolve().getValue());
+            }
+            saveNewXml(dataRows, "fixed_"+feedFile.getFileName());
+        }
+        catch (IOException e) {
+            //todo
+        }
+    }
+
+    void processFile(MultipartFile mf, String fileName, UUID fileId) throws IOException {
         if (fileName == null) {
             throw new ApiException("No filename was provided");
         }
@@ -93,21 +112,29 @@ public class FileProcessingService {
         // TODO: proceed processing ASYNC!
         executorService.submit(() -> {
             try (InputStream is = mf.getInputStream()) {
-                proceedProcessing(is, fileName);
+                proceedProcessing(is, fileName, fileId);
             } catch (IOException e) {
                 log.error("Error processing file: ", e);
             }
         });
     }
 
+    private void saveNewXml(List<DataRow> dataRows, String fileName){
+        var generator = new XmlGenerator();
+        generator.saveNewXml(dataRows, fileName);
+    }
+
     private void processLink(String link) throws IOException, URISyntaxException {
         URI uri = new URI(link);
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
+            safeFileName = getSafeFileName(LocalDateTime.now()+"_"+safeFileName);
+            var feedFile = new FeedFile(null, safeFileName, 0);
+            feedFile = fileRepository.save(feedFile);
             uploadFileToMinio(safeFileName, rbc);
 
             try (InputStream is = new FileInputStream(safeFileName)) {
-                proceedProcessing(is, safeFileName);
+                proceedProcessing(is, safeFileName, feedFile.getId());
             } finally {
                 new File(safeFileName).delete();
             }
@@ -116,37 +143,34 @@ public class FileProcessingService {
 
     private void uploadFileToMinio(MultipartFile mf, String fileName) {
         log.debug("Uploading file to MinIO: {}", fileName);
-        String minioFileName = fileName + Instant.now();
-        minioService.uploadFile(minioFileName, mf);
+        minioService.uploadFile(fileName, mf);
     }
 
     private void uploadFileToMinio(String fileName, ReadableByteChannel rbc) throws IOException {
         log.debug("Uploading file to MinIO: {}", fileName);
-        String minioFileName = fileName + Instant.now();
         try (FileOutputStream fos = new FileOutputStream(fileName)) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-            minioService.uploadFile(minioFileName, new FileInputStream(fileName));
+            minioService.uploadFile(fileName, new FileInputStream(fileName));
         }
     }
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
                 .replaceAll("[<>:\"/|*]", "_");
-        return "temp_file_" + sub.substring(0, sub.lastIndexOf('?'));
+        return sub.substring(0, sub.lastIndexOf('?'));
     }
 
-    private void proceedProcessing(InputStream is, String fileName) throws IOException {
+    private void proceedProcessing(InputStream is, String fileName, UUID fileId) throws IOException {
         log.debug("Processing file: {}", fileName);
 
         String fileType = getFileExtension(fileName);
         FileParser parser = getParser(fileType);
 
-        FeedFile feedFile = new FeedFile(null, fileName, 0);
+        FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
         DataRowValidator validator = new DataRowValidator(feedFile, fileErrorRepository);
         int rowsCount = parser.parse(validator, is);
         feedFile.setRowsCount(rowsCount);
         fileRepository.save(feedFile);
-
         FileRequest fileRequest = new FileRequest(null, feedFile, FileRequestType.UPLOADED);
         fileRequestRepository.save(fileRequest);
 
@@ -159,8 +183,7 @@ public class FileProcessingService {
 
     private FileParser getParser(String fileType) {
         return switch (fileType) {
-            case "csv" -> new CsvParser();
-            case "xlsx" -> new XlsxParser();
+            case "xml" -> new XmlParser();
             default -> throw new IllegalArgumentException("Unsupported file type: " + fileType);
         };
     }

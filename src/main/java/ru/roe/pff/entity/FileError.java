@@ -21,6 +21,9 @@ public class FileError {
     @Column(nullable = false)
     private String error;
 
+    @OneToOne
+    private ErrorSolve errorSolve;
+
     @Column
     @Enumerated(value = EnumType.STRING)
     private ErrorType errorType;

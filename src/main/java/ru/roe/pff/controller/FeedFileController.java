@@ -45,4 +45,9 @@ public class FeedFileController {
     public List<FeedFile> getAll() {
         return fileService.getAll();
     }
+
+    @PostMapping("/complete/{id}")
+    public void completeFile(@PathVariable UUID id) {
+        fileService.completeFile(id);
+    }
 }

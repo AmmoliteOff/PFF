@@ -1,70 +1,184 @@
 package ru.roe.pff.files.xml;
 
-import org.springframework.stereotype.Component;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
+import org.xml.sax.Attributes;
+import org.xml.sax.helpers.DefaultHandler;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.processing.DataRowValidator;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
-@Component
 public class XmlParser extends FileParser {
 
-    @Override
-    public Integer parse(DataRowValidator validator, InputStream input) throws IOException {
-        // TODO: в factory можно setValidating(true) и тогда парсер будет "валидирующий" - может это поможет в будущем.
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        try {
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document document = builder.parse(input);
+    private static final String[] fieldOrder = {
+        "id",
+        "available",
+        "price",
+        "currencyId",
+        "categoryId",
+        "picture",
+        "name",
+        "vendor",
+        "description",
+        "barcode",
+        "param_Артикул",
+        "param_Рейтинг",
+        "param_Количество отзывов",
+        "param_Скидка",
+        "param_Новинка"
+    };
 
-            Element root = document.getDocumentElement();
-            NodeList offers = root.getElementsByTagName("offer");
+    private static final Map<String, Integer> fieldMap = new HashMap<>();
 
-            int rowIndex = 0;
-            List<String> headers = getHeaders(); // Заголовки из XML структуры
-
-            for (int i = 0; i < offers.getLength(); i++) {
-                Node node = offers.item(i);
-                if (node.getNodeType() == Node.ELEMENT_NODE) {
-                    Element offer = (Element) node;
-
-                    List<String> rowData = new ArrayList<>();
-                    for (String header : headers) {
-                        String value = offer.getElementsByTagName(header).getLength() > 0
-                                ? offer.getElementsByTagName(header).item(0).getTextContent()
-                                : "";
-                        rowData.add(value);
-                    }
-                    validator.validateRow(new DataRow(rowData, rowIndex));
-                    rowIndex++;
-                }
-            }
-            return rowIndex;
-        } catch (ParserConfigurationException | SAXException e) {
-            // TODO: process XML parsing exception
-            throw new RuntimeException(e);
+    static {
+        for (int i = 0; i < fieldOrder.length; i++) {
+            fieldMap.put(fieldOrder[i], i);
         }
     }
-
     @Override
-    public List<DataRow> parseFrom(int begin, int end, InputStream input) {
-        return List.of(); // TODO: impl
+    public Integer parse(DataRowValidator dataRowValidator, InputStream input) throws IOException {
+        List<DataRow> dataRows = parseFrom(0, Integer.MAX_VALUE, input);
+        int validCount = 0;
+        for (DataRow row : dataRows) {
+            dataRowValidator.validateRow(row, getColumnNames());
+            validCount++;
+        }
+        return validCount;
     }
 
-    // TODO: может определять все хэдеры именно во время парсинга
-    private List<String> getHeaders() {
-        return List.of("price", "currencyId", "categoryId", "picture", "name", "vendor", "description", "barcode");
+    @Override
+    public List<DataRow> parseFrom(int begin, int end, InputStream input) throws IOException {
+        List<DataRow> dataRows = new ArrayList<>();
+        try {
+            SAXParser parser = SAXParserFactory.newInstance().newSAXParser();
+            SaxHandler handler = new SaxHandler(begin, end, dataRows);
+            parser.parse(input, handler);
+        } catch (Exception e) {
+            throw new IOException("SAX parsing error", e);
+        }
+        return dataRows;
+    }
+
+    public static List<String> getColumnNames() {
+        return Collections.unmodifiableList(Arrays.asList(fieldOrder));
+    }
+
+    private static class SaxHandler extends DefaultHandler {
+        private int begin;
+        private int end;
+        private List<DataRow> dataRows;
+        private int currentRow;
+        private List<String> currentFields;
+        private StringBuilder characters;
+        private String currentElementName;
+        private String currentParamName;
+        private boolean insideOffer;
+
+        public SaxHandler(int begin, int end, List<DataRow> dataRows) {
+            this.begin = begin;
+            this.end = end;
+            this.dataRows = dataRows;
+            this.currentRow = 0;
+            this.characters = new StringBuilder();
+        }
+
+        @Override
+        public void startElement(String uri, String localName, String qName, Attributes attributes) {
+            if (qName.equals("offer")) {
+                currentRow++;
+                currentFields = new ArrayList<>(Collections.nCopies(fieldOrder.length, ""));
+                insideOffer = true;
+                String id = attributes.getValue("id");
+                String available = attributes.getValue("available");
+                setField("id", id);
+                setField("available", available);
+            } else if (insideOffer) {
+                if (qName.equals("price")) {
+                    currentElementName = "price";
+                    characters = new StringBuilder();
+                } else if (qName.equals("currencyId")) {
+                    currentElementName = "currencyId";
+                    characters = new StringBuilder();
+                } else if (qName.equals("categoryId")) {
+                    currentElementName = "categoryId";
+                    characters = new StringBuilder();
+                } else if (qName.equals("picture")) {
+                    currentElementName = "picture";
+                    characters = new StringBuilder();
+                } else if (qName.equals("name")) {
+                    currentElementName = "name";
+                    characters = new StringBuilder();
+                } else if (qName.equals("vendor")) {
+                    currentElementName = "vendor";
+                    characters = new StringBuilder();
+                } else if (qName.equals("description")) {
+                    currentElementName = "description";
+                    characters = new StringBuilder();
+                } else if (qName.equals("barcode")) {
+                    currentElementName = "barcode";
+                    characters = new StringBuilder();
+                } else if (qName.equals("param")) {
+                    String name = attributes.getValue("name");
+                    if (name != null) {
+                        currentParamName = "param_" + name;
+                        characters = new StringBuilder();
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void characters(char[] ch, int start, int length) {
+            if (characters != null) {
+                characters.append(ch, start, length);
+            }
+        }
+
+        @Override
+        public void endElement(String uri, String localName, String qName) {
+            if (insideOffer) {
+                if (qName.equals("price")) {
+                    setField("price", characters.toString());
+                } else if (qName.equals("currencyId")) {
+                    setField("currencyId", characters.toString());
+                } else if (qName.equals("categoryId")) {
+                    setField("categoryId", characters.toString());
+                } else if (qName.equals("picture")) {
+                    setField("picture", characters.toString());
+                } else if (qName.equals("name")) {
+                    setField("name", characters.toString());
+                } else if (qName.equals("vendor")) {
+                    setField("vendor", characters.toString());
+                } else if (qName.equals("description")) {
+                    setField("description", characters.toString());
+                } else if (qName.equals("barcode")) {
+                    setField("barcode", characters.toString());
+                } else if (qName.equals("param")) {
+                    if (currentParamName != null && fieldMap.containsKey(currentParamName)) {
+                        setField(currentParamName, characters.toString());
+                    }
+                    currentParamName = null;
+                } else if (qName.equals("offer")) {
+                    if (currentRow >= begin && currentRow <= end) {
+                        DataRow dataRow = new DataRow(currentFields, currentRow);
+                        dataRows.add(dataRow);
+                    }
+                    insideOffer = false;
+                    currentFields = null;
+                }
+                characters = null;
+                currentElementName = null;
+            }
+        }
+
+        private void setField(String fieldName, String value) {
+            if (insideOffer && currentFields != null && fieldMap.containsKey(fieldName)) {
+                currentFields.set(fieldMap.get(fieldName), value);
+            }
+        }
     }
 }
