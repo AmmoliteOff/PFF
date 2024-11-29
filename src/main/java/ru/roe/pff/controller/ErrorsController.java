@@ -3,6 +3,7 @@ package ru.roe.pff.controller;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import ru.roe.pff.dto.in.ErrorSolveDto;
+import ru.roe.pff.dto.out.FileErrorDto;
 import ru.roe.pff.entity.FileError;
 import ru.roe.pff.service.ErrorService;
 
@@ -22,7 +23,7 @@ public class ErrorsController {
     }
 
     @GetMapping("/{id}")
-    public List<FileError> getErrorsByFileId(@PathVariable UUID id){
+    public List<FileErrorDto> getErrorsByFileId(@PathVariable UUID id){
         return errorService.getErrorsByFileId(id);
     }
 }
