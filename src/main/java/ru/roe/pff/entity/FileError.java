@@ -21,7 +21,10 @@ public class FileError {
     private FeedFile feedFile;
 
     @Column(nullable = false)
-    private String error;
+    private String title;
+
+    @Column(nullable = false)
+    private String description;
 
     @OneToOne(cascade = CascadeType.ALL)
     private ErrorSolve errorSolve;

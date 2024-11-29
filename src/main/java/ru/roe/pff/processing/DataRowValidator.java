@@ -39,7 +39,8 @@ public class DataRowValidator {
 
             if (tagValue.isEmpty()) {
                 addErrorToBatch(
-                        "Пустое значение на позиции: " + tagName,
+                        "Пустое значение",
+                        "Текущая позиция (%s) не должна быть пустой".formatted(tagName),
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         i
@@ -66,7 +67,8 @@ public class DataRowValidator {
     private void validateDuplicateArticle(DataRow row, String tagValue, int tagIndex) {
         if (seenArticles.contains(tagValue)) {
             addErrorToBatch(
-                    "Дубликат артикула: " + tagValue,
+                    "Дубликат артикула",
+                    "Артикул (%s) должен быть уникальным".formatted(tagValue),
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     tagIndex
@@ -80,6 +82,7 @@ public class DataRowValidator {
         if (seenDataRows.contains(row)) {
             addErrorToBatch(
                     "Дубликат целой записи",
+                    "Фид содержит 2 или более одинаковых записей",
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     -1
@@ -103,7 +106,8 @@ public class DataRowValidator {
             double numericValue = Double.parseDouble(tagValue);
             if (numericValue < 0) {
                 addErrorToBatch(
-                        "Отрицательное числовое значение на позиции: " + tagName,
+                        "Отрицательное число",
+                        "Отрицательное числовое значение: " + tagValue + " (позиция: %s)".formatted(tagName),
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -111,7 +115,8 @@ public class DataRowValidator {
             }
             if (numericValue == 0 && tagName.equals("price")) {
                 addErrorToBatch(
-                        "Неправильное значение цены (ноль) на позиции: " + tagName,
+                        "Нулевая цена",
+                        "Неправильное значение цены (ноль) (позиция: %s)".formatted(tagName),
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -119,7 +124,8 @@ public class DataRowValidator {
             }
             if (numericValue >= 100.0 && tagName.toLowerCase().contains("скидка")) {
                 addErrorToBatch(
-                        "Неправильное значение скидки (>=100) на позиции: " + tagName,
+                        "Неправильная скидка",
+                        "Неправильное значение скидки (>=100): " + tagValue + " (позиция: %s)".formatted(tagName),
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -127,7 +133,8 @@ public class DataRowValidator {
             }
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                    "Неправильное числовое значение на позиции: " + tagName,
+                    "Неправильное число",
+                    "Неправильное числовое значение (позиция: %s)".formatted(tagName),
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     tagIndex
@@ -143,7 +150,8 @@ public class DataRowValidator {
             long parsedId = Long.parseLong(tagValue);
             if (parsedId <= 0) {
                 addErrorToBatch(
-                        "Неправильный ID (<0): " + tagValue,
+                        "Неправильный ID",
+                        "ID (%s) не может быть 0 или меньше".formatted(tagValue),
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -151,7 +159,8 @@ public class DataRowValidator {
             }
             if (lastParsedId >= parsedId) {
                 addErrorToBatch(
-                        "Дубликат ID: " + tagValue,
+                        "Дубликат ID",
+                        "ID (%s) должен быть уникальным".formatted(tagValue),
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -160,7 +169,8 @@ public class DataRowValidator {
             lastParsedId = parsedId;
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                    "Неправильный ID: " + tagValue,
+                    "Неправильный ID",
+                    "ID (%s) должен быть числом".formatted(tagValue),
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     tagIndex
@@ -168,9 +178,10 @@ public class DataRowValidator {
         }
     }
 
-    protected void addErrorToBatch(String error, ErrorType errorType, int rowIndex, int tagIndex) {
+    protected void addErrorToBatch(String title, String description, ErrorType errorType, int rowIndex, int tagIndex) {
         FileError fileError = new FileError();
-        fileError.setError(error);
+        fileError.setTitle(title);
+        fileError.setDescription(description);
         fileError.setErrorType(errorType);
         fileError.setSuppressed(false);
         fileError.setRowIndex(rowIndex);
