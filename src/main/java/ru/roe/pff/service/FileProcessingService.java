@@ -61,7 +61,7 @@ public class FileProcessingService {
     public List<DataRow> getFrom(FeedFile feedFile, Integer begin, Integer end){
         String fileType = getFileExtension(feedFile.getFileName());
         FileParser parser = getParser(fileType);
-        try (InputStream is = new FileInputStream(feedFile.getFileName())) {
+        try (InputStream is = minioService.getFile(feedFile.getFileName())) {
             return parser.parseFrom(begin, end, is);
         } catch (IOException e) {
             throw new RuntimeException(e);

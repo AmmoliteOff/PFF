@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: "optional:configserver:"
   llm:
     uri: gpt://b1gs02efi9ecn1ih2v9r/yandexgpt/latest
     oAuthToken: y0_AgAAAAAXLrNhAATuwQAAAAEaPIoxAABqS2O6cN1DF5PNS3DhknWVUMNXvg
