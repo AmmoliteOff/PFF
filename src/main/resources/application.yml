@@ -1,9 +1,6 @@
 spring:
   config:
     import: "optional:configserver:"
-  llm:
-    uri: gpt://b1gs02efi9ecn1ih2v9r/yandexgpt/latest
-    oAuthToken: y0_AgAAAAAXLrNhAATuwQAAAAEaPIoxAABqS2O6cN1DF5PNS3DhknWVUMNXvg
   application:
     name: Product Feed Fixer
   datasource:
@@ -13,7 +10,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -39,3 +36,6 @@ minio:
 application:
   llm:
     coverage: 0.3
+yandex:
+  uri: gpt://b1gs02efi9ecn1ih2v9r/yandexgpt-32k/rc
+  yandexPassportOauthToken: y0_AgAAAAAXLrNhAATuwQAAAAEaPIoxAABqS2O6cN1DF5PNS3DhknWVUMNXvg
