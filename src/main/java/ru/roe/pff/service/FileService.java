@@ -3,10 +3,13 @@ package ru.roe.pff.service;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.dto.out.PagesCountDto;
@@ -35,22 +38,30 @@ public class FileService {
     private final FileRepository fileRepository;
     private final MinioService minioService;
 
+    @Transactional
     public ResponseEntity<String> getFixedFile() {
 
-        // TODO: 'FIXED' state
-
+        // TODO: Get 'FIXED' feed file
         var latestFeedFile = fileRepository.getLatest().orElseThrow(EntityNotFoundException::new);
+
         var fileStream = minioService.getFile(latestFeedFile.getFileName());
         var xmlContent = new Scanner(fileStream, StandardCharsets.UTF_8)
                 .useDelimiter("\\A")
                 .next();
 
-        log.debug("Feed file was accessed through the static link => saved log");
+        log.debug("Feed file ({}) was accessed through the static link => saved log", latestFeedFile.getFileName());
         linkLogRepository.save(new FixedFeedFileLog(latestFeedFile));
 
         var headers = new HttpHeaders();
         headers.add(HttpHeaders.CONTENT_TYPE, "application/xml");
+        // TODO: uncomment to download right away upon GET request
+        // headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=%s.xml".formatted(latestFeedFile.getFileName()));
         return new ResponseEntity<>(xmlContent, headers, HttpStatus.OK);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<FixedFeedFileLog> getStaticLinkLogs(Pageable pageable) {
+        return linkLogRepository.findAll(pageable);
     }
 
     public void createFromFile(MultipartFile file) {
@@ -62,6 +73,7 @@ public class FileService {
         //        fileProcessingService.addToQueue(file);
     }
 
+    @Transactional
     public void createFromLink(FileLinkDto dto) {
         // ONLY 1 link can exist for now => must override
         linkRepository.deleteAll();
@@ -69,6 +81,7 @@ public class FileService {
         fileProcessingService.submitLinkToProcess(dto.link());
     }
 
+    @Transactional(readOnly = true)
     public List<DataRow> getDataRowsByPage(UUID id, Integer page) {
         var feedFile = fileRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id)));
@@ -77,6 +90,7 @@ public class FileService {
         return fileProcessingService.getFrom(feedFile, begin, end);
     }
 
+    @Transactional(readOnly = true)
     public FeedFile getById(UUID id) {
         return fileRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id)));
@@ -86,19 +100,21 @@ public class FileService {
         fileProcessingService.generateFixedFile(fileId);
     }
 
+    @Transactional(readOnly = true)
     public List<FeedFile> getAll() {
         return fileRepository.findAll();
+    }
+
+    @Transactional(readOnly = true)
+    public PagesCountDto getPages(UUID id) {
+        var count = fileRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id))).getRowsCount();
+
+        return new PagesCountDto((int) Math.ceil((double) count / ELEMENTS_PER_PAGE));
     }
 
     private String getSafeFileName(String link) {
         return link.substring(link.indexOf("://") + 3)
                 .replaceAll("[<>:\"/|*]", "_");
-    }
-
-    public PagesCountDto getPages(UUID id) {
-        var count = fileRepository.findById(id)
-            .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id))).getRowsCount();
-
-        return new PagesCountDto((int) Math.ceil((double) count /ELEMENTS_PER_PAGE));
     }
 }

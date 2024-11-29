@@ -11,10 +11,10 @@ import java.util.UUID;
 @Repository
 public interface FileRepository extends JpaRepository<FeedFile, UUID> {
 
-    @Query("SELECT f FROM FeedFile f ORDER BY f.createdAt DESC")
+    @Query(value = "select * from public.feed_file order by created_at desc limit 1", nativeQuery = true)
     Optional<FeedFile> getLatest();
 
-    @Query("SELECT f.link FROM FeedFile f ORDER BY f.createdAt DESC")
+    @Query(value = "select link from public.feed_file order by created_at desc limit 1", nativeQuery = true)
     Optional<String> getLatestFixedLink();
 
 }

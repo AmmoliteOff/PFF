@@ -1,6 +1,8 @@
 package ru.roe.pff.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -8,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.dto.out.PagesCountDto;
 import ru.roe.pff.entity.FeedFile;
+import ru.roe.pff.entity.FixedFeedFileLog;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.service.FileService;
 
@@ -59,8 +62,13 @@ public class FeedFileController {
     }
 
     @GetMapping("/{id}/pages")
-    public PagesCountDto getPages(@PathVariable UUID id){
+    public PagesCountDto getPages(@PathVariable UUID id) {
         return fileService.getPages(id);
+    }
+
+    @GetMapping("/logs")
+    public Page<FixedFeedFileLog> getLogs(Pageable pageable) {
+        return fileService.getStaticLinkLogs(pageable);
     }
 
 }
