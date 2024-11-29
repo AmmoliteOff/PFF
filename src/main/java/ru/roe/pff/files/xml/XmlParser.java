@@ -1,6 +1,7 @@
 package ru.roe.pff.files.xml;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ import java.util.*;
 
 import static ru.roe.pff.files.xml.XmlUtil.FIELD_ORDER;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class XmlParser extends FileParser {
@@ -42,27 +44,33 @@ public class XmlParser extends FileParser {
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<DataRow> parse(UUID fileId, InputStream input) {
+        var feedFile = fileRepository.findById(fileId).orElseThrow();
         List<FileError> errors = new ArrayList<>();
         List<DataRow> dataRows = parseFrom(0, Integer.MAX_VALUE, input);
 
+        log.debug("Parsed file: {}", feedFile.getFileName());
+        log.debug("Validating file... ({})", feedFile.getFileName());
+
         for (DataRow row : dataRows) {
-            var rowErrors = dataRowValidator.validateRow(row, getColumnNames());
+            var rowErrors = dataRowValidator.validateRow(row, getTagNames());
             errors.addAll(rowErrors);
         }
-        var feedFile = fileRepository.findById(fileId).orElseThrow();
-        errors.forEach(value -> value.setFeedFile(feedFile));
-        saveAllErrors(errors);
-        return dataRows;
-    }
+        dataRowValidator.clearTrackingCollections();
 
-    private void saveAllErrors(List<FileError> errors) {
+        log.debug("Validated file: {}", feedFile.getFileName());
+        log.debug("Saving found errors... ({})", feedFile.getFileName());
+
+        errors.forEach(value -> value.setFeedFile(feedFile));
         fileErrorRepository.saveAll(errors);
+
+        log.debug("Saved found errors for file: {}", feedFile.getFileName());
+        return dataRows;
     }
 
     @Override
     public List<DataRow> parseFrom(int begin, int end, InputStream input) {
         List<DataRow> dataRows = new ArrayList<>();
-        dataRows.add(new DataRow(getColumnNames(), -1));
+        dataRows.add(new DataRow(getTagNames(), -1));
         try {
             SAXParser parser = SAXParserFactory.newInstance().newSAXParser();
             SaxHandler handler = new SaxHandler(begin, end, dataRows);
@@ -73,7 +81,7 @@ public class XmlParser extends FileParser {
         return dataRows;
     }
 
-    public static List<String> getColumnNames() {
+    public static List<String> getTagNames() {
         return List.of(FIELD_ORDER);
     }
 

@@ -8,47 +8,84 @@ import ru.roe.pff.entity.FileError;
 import ru.roe.pff.enums.ErrorType;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @RequiredArgsConstructor
 @Component
 public class DataRowValidator {
+
     private final List<FileError> fileErrorsBatch = new ArrayList<>();
-    private static final int ERROR_BATCH_SIZE = 10;
+
+    private final Set<DataRow> seenDataRows = new HashSet<>();
+    private final Set<String> seenArticles = new HashSet<>();
     private long lastParsedId = 0;
 
-    @Transactional
-    public List<FileError> validateRow(DataRow row, List<String> titles) {
-        fileErrorsBatch.clear();
-        for (int i = 1; i < row.getData().size(); i++) {
-            String columnName = titles.get(i);
-            String cellValue = row.getData().get(i);
+    public void clearTrackingCollections() {
+        seenDataRows.clear();
+        seenArticles.clear();
+    }
 
-            if (cellValue.isEmpty()) {
+    @Transactional
+    public List<FileError> validateRow(DataRow row, List<String> tagNames) {
+        fileErrorsBatch.clear();
+        validateDuplicateRow(row);
+        for (int i = 1; i < row.getData().size(); i++) {
+            String tagName = tagNames.get(i);
+            String tagValue = row.getData().get(i);
+
+            if (tagValue.isEmpty()) {
                 addErrorToBatch(
-                    "Empty cell found in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    i
+                        "Empty value found in tag: " + tagName,
+                        ErrorType.TECHNICAL,
+                        row.getIndex(),
+                        i
                 );
                 continue;
             }
 
-            if (columnName.equalsIgnoreCase("id")) {
-                validatePrimaryId(row, cellValue, columnName, i);
+            if (tagName.equalsIgnoreCase("id")) {
+                validatePrimaryId(row, tagValue, tagName, i);
                 continue;
             }
 
-            if (isAdditionalIdColumn(columnName)) {
-                validateAdditionalId(row, cellValue, columnName, i);
+            if (isNumericValue(tagValue)) {
+                validateNumericValue(row, tagValue, tagName, i);
             }
 
-            if (isNumericValue(cellValue)) {
-                validateNumericValue(row, cellValue, columnName, i);
+            if (tagName.toLowerCase().contains("артикул") || tagName.toLowerCase().contains("article")) {
+                validateDuplicateArticle(row, tagValue, i);
             }
         }
         return fileErrorsBatch;
+    }
+
+    private void validateDuplicateArticle(DataRow row, String tagValue, int tagIndex) {
+        if (seenArticles.contains(tagValue)) {
+            addErrorToBatch(
+                    "Duplicate article found: " + tagValue,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    tagIndex
+            );
+        } else {
+            seenArticles.add(tagValue);
+        }
+    }
+
+    private void validateDuplicateRow(DataRow row) {
+        if (seenDataRows.contains(row)) {
+            addErrorToBatch(
+                    "Duplicate offer entry",
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    -1
+            );
+        } else {
+            seenDataRows.add(row);
+        }
     }
 
     protected boolean isNumericValue(String cellValue) {
@@ -60,88 +97,81 @@ public class DataRowValidator {
         }
     }
 
-    protected boolean isAdditionalIdColumn(String columnName) {
-        return List.of("внешний id", "sku", "uuid", "артикул").contains(columnName);
-    }
-
-    protected void validateNumericValue(DataRow row, String cellValue, String columnName, int columnIndex) {
+    protected void validateNumericValue(DataRow row, String tagValue, String tagName, int tagIndex) {
         try {
-            double numericValue = Double.parseDouble(cellValue);
+            double numericValue = Double.parseDouble(tagValue);
             if (numericValue < 0) {
                 addErrorToBatch(
-                    "Negative value found in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                        "Negative value found in tag: " + tagName,
+                        ErrorType.TECHNICAL,
+                        row.getIndex(),
+                        tagIndex
                 );
             }
-            if (numericValue == 0 && columnName.contains("цена")) {
+            if (numericValue == 0 && tagName.equals("price")) {
                 addErrorToBatch(
-                    "Invalid price value (0) in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                        "Invalid price value (0) in tag: " + tagName,
+                        ErrorType.TECHNICAL,
+                        row.getIndex(),
+                        tagIndex
                 );
             }
-            if (numericValue >= 100.0 && columnName.contains("скидка")) {
+            if (numericValue >= 100.0 && tagName.toLowerCase().contains("скидка")) {
                 addErrorToBatch(
-                    "Invalid discount value (>=100) in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                        "Invalid discount value (>=100) in tag: " + tagName,
+                        ErrorType.TECHNICAL,
+                        row.getIndex(),
+                        tagIndex
                 );
             }
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                "Invalid numeric value in column: " + columnName,
-                ErrorType.TECHNICAL,
-                row.getIndex(),
-                columnIndex
+                    "Invalid numeric value in tag: " + tagName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    tagIndex
             );
         }
     }
 
-    protected void validatePrimaryId(DataRow row, String cellValue, String columnName, int columnIndex) {
+    protected void validatePrimaryId(DataRow row, String tagValue, String tagName, int tagIndex) {
         try {
-            long parsedId = Long.parseLong(cellValue);
+            long parsedId = Long.parseLong(tagValue);
             if (parsedId <= 0) {
                 addErrorToBatch(
-                    "Invalid ID (<0) found: " + cellValue + " in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                        "Invalid ID (<0) found: " + tagValue + " in tag: " + tagName,
+                        ErrorType.TECHNICAL,
+                        row.getIndex(),
+                        tagIndex
                 );
             }
             if (lastParsedId >= parsedId) {
                 addErrorToBatch(
-                    "Duplicate ID found: " + cellValue + " in column: " + columnName,
-                    ErrorType.TECHNICAL,
-                    row.getIndex(),
-                    columnIndex
+                        "Duplicate ID found: " + tagValue + " in tag: " + tagName,
+                        ErrorType.TECHNICAL,
+                        row.getIndex(),
+                        tagIndex
                 );
             }
             lastParsedId = parsedId;
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                "Invalid ID found: " + cellValue + " in column: " + columnName,
-                ErrorType.TECHNICAL,
-                row.getIndex(),
-                columnIndex
+                    "Invalid ID found: " + tagValue + " in tag: " + tagName,
+                    ErrorType.TECHNICAL,
+                    row.getIndex(),
+                    tagIndex
             );
         }
     }
 
-    protected void validateAdditionalId(DataRow row, String cellValue, String columnName, int columnIndex) {
-        // Additional validation logic can be added here
-    }
-
-    protected void addErrorToBatch(String error, ErrorType errorType, int rowIndex, int columnIndex) {
+    protected void addErrorToBatch(String error, ErrorType errorType, int rowIndex, int tagIndex) {
         FileError fileError = new FileError();
         fileError.setError(error);
         fileError.setErrorType(errorType);
         fileError.setSuppressed(false);
         fileError.setRowIndex(rowIndex);
-        fileError.setColumnIndex(columnIndex);
+        fileError.setColumnIndex(tagIndex);
         fileErrorsBatch.add(fileError);
     }
+
 }

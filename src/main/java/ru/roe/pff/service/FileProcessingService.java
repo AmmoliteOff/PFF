@@ -27,10 +27,7 @@ import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.LocalDateTime;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 
 @Slf4j
@@ -144,22 +141,29 @@ public class FileProcessingService {
     }
 
     public void proceedProcessing(String fileName, UUID fileId) {
-        log.debug("Processing file: {}", fileName);
+        log.debug("PROCESSING FILE... ({})", fileName);
         var fileStream = minioService.getFile(fileName);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
+
+        log.debug("Parsing file... ({})", fileName);
         var rows = xmlParser.parse(feedFile.getId(), fileStream);
+
         var aiSuggestions = llmService.checkForTitleChange(rows);
         addAiSuggestions(aiSuggestions, feedFile);
+
+        log.debug("Saving processed file... ({})", feedFile.getFileName());
         feedFile.setRowsCount(rows.size());
         fileRepository.save(feedFile);
 
-        log.debug("Processed and parsed file: {}", fileName);
+        log.debug("PROCESSED FILE: {}", fileName);
     }
 
     private void addAiSuggestions(List<LlmWarnings> aiSuggestions, FeedFile feedFile) {
+        log.debug("Adding AI suggestions to file... ({})", feedFile.getFileName());
+        var errors = new ArrayList<FileError>();
         for (var suggestion : aiSuggestions) {
-            var error = new FileError(
+            errors.add(new FileError(
                     null,
                     feedFile,
                     suggestion.getMessage(),
@@ -168,9 +172,10 @@ public class FileProcessingService {
                     suggestion.getRowIndex(),
                     suggestion.getColumnIndex() - 1,
                     false
-            );
-            fileErrorRepository.save(error);
+            ));
         }
+        log.debug("Added AI suggestions to file: {}", feedFile.getFileName());
+        fileErrorRepository.saveAll(errors);
     }
 
     private void verifyLinkIsAccessible(String link) {
