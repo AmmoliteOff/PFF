@@ -1,11 +1,10 @@
 package ru.roe.pff.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.FileParser;
@@ -17,13 +16,10 @@ import ru.roe.pff.repository.FileRepository;
 
 import java.io.*;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.LocalDateTime;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
@@ -37,21 +33,14 @@ public class FileProcessingService {
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
 
-    private final Queue<Object> queue = new LinkedList<>();
     private final XmlParser xmlParser;
+    private final XmlGenerator xmlGenerator;
 
-    @Scheduled(fixedRate = 1000)
-    public void processFiles() {
-        if (!queue.isEmpty()) {
-            var obj = queue.poll();
-            try {
-                executorService.submit(() -> {
-                    processQueueElement(obj);
-                }).get();
-            }
-            catch (Exception e) {
-                log.error(e.getMessage(), e);
-            }
+    public void submitLinkToProcess(String link) {
+        try {
+            executorService.submit(() -> processLink(link)).get();
+        } catch (Exception e) {
+            log.error("Error processing executor task: ", e);
         }
     }
 
@@ -67,24 +56,7 @@ public class FileProcessingService {
         }
     }
 
-    public void addToQueue(Object file) {
-        queue.add(file);
-    }
-
-    private void processQueueElement(Object obj) {
-        if (obj instanceof FileLinkDto linkDto) {
-            try {
-                processLink(linkDto.link());
-            } catch (IOException | URISyntaxException e) {
-                log.error("Error processing link: ", e);
-            }
-        }
-//        else if (obj instanceof MultipartFile mf) {
-//            processFile(mf);
-//        }
-    }
-
-    public void generateFixedFile(UUID fileId) { //TODO сделать accept и обработку в фоне
+    public void generateFixedFile(UUID fileId) {
         var feedFile = fileRepository.findById(fileId).orElseThrow();//todo
         var is = minioService.getFile(feedFile.getFileName());
         var parser = getParser(getFileExtension(feedFile.getFileName()));
@@ -113,18 +85,17 @@ public class FileProcessingService {
                     log.error("Error processing file: ", e);
                 }
             }).get();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             log.error("Error processing file: ", e);
         }
     }
 
     private void saveNewXml(List<DataRow> dataRows, String fileName) {
-        var generator = new XmlGenerator();
-        generator.saveNewXml(dataRows, fileName);
+        xmlGenerator.saveNewXml(dataRows, fileName);
     }
 
-    private void processLink(String link) throws URISyntaxException, IOException {
+    @SneakyThrows
+    private void processLink(String link) {
         URI uri = new URI(link);
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
@@ -158,11 +129,12 @@ public class FileProcessingService {
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
-            .replaceAll("[<>:\"/|*]", "_");
-        return sub.substring(0, sub.lastIndexOf('?'));
+                .replaceAll("[<>:\"/|*]", "_");
+        var lastIndex = sub.lastIndexOf('?');
+        return lastIndex != -1 ? sub.substring(0, lastIndex) : sub;
     }
 
-    public void proceedProcessing(InputStream is, String fileName, UUID fileId){
+    public void proceedProcessing(InputStream is, String fileName, UUID fileId) {
         log.debug("Processing file: {}", fileName);
 
         String fileType = getFileExtension(fileName);

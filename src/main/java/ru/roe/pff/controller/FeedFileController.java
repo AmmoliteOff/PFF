@@ -2,6 +2,7 @@ package ru.roe.pff.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
@@ -19,6 +20,11 @@ import java.util.UUID;
 public class FeedFileController {
     private final FileService fileService;
 
+    @GetMapping("/fixed")
+    public ResponseEntity<String> getFixedFile(@RequestParam("fileName") String fileName) {
+        return fileService.getFixedFile(fileName);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void create(@RequestParam("file") MultipartFile file) {
@@ -27,7 +33,7 @@ public class FeedFileController {
 
     @PostMapping("/link")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public void create(@RequestBody FileLinkDto object) {
+    public void createFromLink(@RequestBody FileLinkDto object) {
         fileService.createFromLink(object);
     }
 
@@ -50,4 +56,5 @@ public class FeedFileController {
     public void completeFile(@PathVariable UUID id) {
         fileService.completeFile(id);
     }
+
 }
