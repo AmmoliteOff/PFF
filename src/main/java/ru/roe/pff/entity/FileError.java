@@ -15,7 +15,7 @@ public class FileError {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @ManyToOne
+    @ManyToOne(cascade = CascadeType.ALL)
     private FeedFile feedFile;
 
     @Column(nullable = false)

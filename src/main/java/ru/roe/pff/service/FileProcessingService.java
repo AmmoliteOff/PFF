@@ -1,6 +1,5 @@
 package ru.roe.pff.service;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,11 +20,11 @@ import ru.roe.pff.repository.FileRepository;
 import ru.roe.pff.repository.FileRequestRepository;
 
 import java.io.*;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.time.Instant;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -58,7 +57,7 @@ public class FileProcessingService {
         }
     }
 
-    public List<DataRow> getFrom(FeedFile feedFile, Integer begin, Integer end){
+    public List<DataRow> getFrom(FeedFile feedFile, Integer begin, Integer end) {
         String fileType = getFileExtension(feedFile.getFileName());
         FileParser parser = getParser(fileType);
         try (InputStream is = minioService.getFile(feedFile.getFileName())) {
@@ -75,11 +74,12 @@ public class FileProcessingService {
     }
 
     private void processQueueElement(Object obj) throws IOException, URISyntaxException {
-        if (obj instanceof MultipartFile mf) {
-            processFile(mf);
-        } else if (obj instanceof FileLinkDto linkDto) {
+        if (obj instanceof FileLinkDto linkDto) {
             processLink(linkDto.link());
         }
+//        else if (obj instanceof MultipartFile mf) {
+//            processFile(mf);
+//        }
     }
 
     void processFile(MultipartFile mf) throws IOException {
@@ -91,9 +91,13 @@ public class FileProcessingService {
         uploadFileToMinio(mf, fileName);
 
         // TODO: proceed processing ASYNC!
-        try (InputStream is = mf.getInputStream()) {
-            proceedProcessing(is, fileName);
-        }
+        executorService.submit(() -> {
+            try (InputStream is = mf.getInputStream()) {
+                proceedProcessing(is, fileName);
+            } catch (IOException e) {
+                log.error("Error processing file: ", e);
+            }
+        });
     }
 
     private void processLink(String link) throws IOException, URISyntaxException {
@@ -112,20 +116,22 @@ public class FileProcessingService {
 
     private void uploadFileToMinio(MultipartFile mf, String fileName) {
         log.debug("Uploading file to MinIO: {}", fileName);
-        minioService.uploadFile(fileName, mf);
+        String minioFileName = fileName + Instant.now();
+        minioService.uploadFile(minioFileName, mf);
     }
 
     private void uploadFileToMinio(String fileName, ReadableByteChannel rbc) throws IOException {
         log.debug("Uploading file to MinIO: {}", fileName);
+        String minioFileName = fileName + Instant.now();
         try (FileOutputStream fos = new FileOutputStream(fileName)) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-            minioService.uploadFile(fileName, new FileInputStream(fileName));
+            minioService.uploadFile(minioFileName, new FileInputStream(fileName));
         }
     }
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
-            .replaceAll("[<>:\"/|*]", "_");
+                .replaceAll("[<>:\"/|*]", "_");
         return "temp_file_" + sub.substring(0, sub.lastIndexOf('?'));
     }
 
@@ -135,7 +141,7 @@ public class FileProcessingService {
         String fileType = getFileExtension(fileName);
         FileParser parser = getParser(fileType);
 
-        FeedFile feedFile = new FeedFile(null, fileName, List.of(), 0);
+        FeedFile feedFile = new FeedFile(null, fileName, 0);
         DataRowValidator validator = new DataRowValidator(feedFile, fileErrorRepository);
         int rowsCount = parser.parse(validator, is);
         feedFile.setRowsCount(rowsCount);

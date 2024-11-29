@@ -21,6 +21,9 @@ spring:
     multipart:
       max-file-size: 700MB
       max-request-size: 700MB
+  cloud:
+    config:
+      enabled: false
 
 logging:
   level:

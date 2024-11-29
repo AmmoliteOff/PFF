@@ -14,10 +14,10 @@ public class DataRowValidator {
     private final FeedFile feedFile;
     private final FileErrorRepository fileErrorRepository;
     private List<String> titles;
-    
+
     private static final int ERROR_BATCH_SIZE = 10;
     private final List<FileError> fileErrorsBatch = new ArrayList<>();
-    
+
     private long lastParsedId = 0;
 
     public void validateRow(DataRow row) {
@@ -55,7 +55,7 @@ public class DataRowValidator {
             saveBatch();
         }
     }
-    
+
     protected boolean isNumericValue(String cellValue) {
         try {
             Double.parseDouble(cellValue);
@@ -65,6 +65,7 @@ public class DataRowValidator {
         }
     }
 
+    // TODO: в xml другие проперти
     protected boolean isAdditionalIdColumn(String columnName) {
         return List.of("внешний id", "sku", "uuid", "артикул").contains(columnName);
     }
