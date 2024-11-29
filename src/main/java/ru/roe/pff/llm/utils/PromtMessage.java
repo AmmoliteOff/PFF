@@ -7,5 +7,5 @@ import lombok.Data;
 @AllArgsConstructor
 public class PromtMessage {
     private String role;
-    private String message;
+    private String text;
 }

@@ -139,6 +139,7 @@ public class DataRowValidator {
         FileError fileError = new FileError();
         fileError.setError(error);
         fileError.setErrorType(errorType);
+        fileError.setSuppressed(false);
         fileError.setRowIndex(rowIndex);
         fileError.setColumnIndex(columnIndex);
         fileErrorsBatch.add(fileError);

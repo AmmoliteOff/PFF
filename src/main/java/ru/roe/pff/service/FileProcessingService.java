@@ -5,12 +5,17 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import ru.roe.pff.entity.ErrorSolve;
 import ru.roe.pff.entity.FeedFile;
+import ru.roe.pff.entity.FileError;
+import ru.roe.pff.enums.ErrorType;
 import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.files.xml.XmlGenerator;
 import ru.roe.pff.files.xml.XmlParser;
+import ru.roe.pff.llm.service.LLMService;
 import ru.roe.pff.processing.DataRow;
+import ru.roe.pff.processing.LlmWarnings;
 import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 
@@ -34,6 +39,7 @@ public class FileProcessingService {
     private final MinioService minioService;
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
+    private final LLMService llmService;
 
     private final XmlParser xmlParser;
     private final XmlGenerator xmlGenerator;
@@ -139,7 +145,7 @@ public class FileProcessingService {
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
-                .replaceAll("[<>:\"/|*]", "_");
+            .replaceAll("[<>:\"/|*]", "_");
         var lastIndex = sub.lastIndexOf('?');
         return lastIndex != -1 ? sub.substring(0, lastIndex) : sub;
     }
@@ -151,12 +157,29 @@ public class FileProcessingService {
         FileParser parser = getParser(fileType);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
-        int rowsCount = parser.parse(feedFile.getId(), is);
-        feedFile = fileRepository.findById(fileId).orElseThrow();
-        feedFile.setRowsCount(rowsCount);
+        var rows = parser.parse(feedFile.getId(), is);
+        var aiSuggestions = llmService.checkForTitleChange(rows);
+        addAiSuggestions(aiSuggestions, feedFile);
+        feedFile.setRowsCount(rows.size());
         fileRepository.save(feedFile);
 
         log.debug("Processed and parsed file: {}", fileName);
+    }
+
+    private void addAiSuggestions(List<LlmWarnings> aiSuggestions, FeedFile feedFile) {
+        for (var suggestion : aiSuggestions) {
+            var error = new FileError(
+                null,
+                feedFile,
+                suggestion.getMessage(),
+                new ErrorSolve(null, suggestion.getValue()),
+                ErrorType.AI,
+                suggestion.getRowIndex(),
+                suggestion.getColumnIndex() - 1,
+                false
+            );
+            fileErrorRepository.save(error);
+        }
     }
 
     private String getFileExtension(String fileName) {

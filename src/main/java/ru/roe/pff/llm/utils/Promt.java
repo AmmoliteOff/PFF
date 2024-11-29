@@ -1,7 +1,6 @@
 package ru.roe.pff.llm.utils;
 
 import lombok.Data;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,19 +9,19 @@ import java.util.List;
 public class Promt {
     private final CompletionOptions completionOptions;
     private final List<PromtMessage> messages;
-    @Value("${spring.llm.uri}")
-    private String modelUri;
+    private final String modelUri;
 
-    private Promt(CompletionOptions completionOptions, List<PromtMessage> messages) {
+    private Promt(CompletionOptions completionOptions, List<PromtMessage> messages, String modelUri) {
         this.completionOptions = completionOptions;
         this.messages = messages;
+        this.modelUri = modelUri;
     }
 
-    public static Promt createPrompt(Double temperature, Integer tokens, String systemMessage, String userMessage) {
+    public static Promt createPrompt(String modelUri, Double temperature, Integer tokens, String systemMessage, String userMessage) {
         var competionOptions = new CompletionOptions(false, temperature, tokens);
         var messages = new ArrayList<PromtMessage>();
         messages.add(new PromtMessage("system", systemMessage));
         messages.add(new PromtMessage("user", userMessage));
-        return new Promt(competionOptions, messages);
+        return new Promt(competionOptions, messages, modelUri);
     }
 }
