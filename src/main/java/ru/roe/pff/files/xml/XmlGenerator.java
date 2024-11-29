@@ -1,37 +1,32 @@
 package ru.roe.pff.files.xml;
 
-import org.w3c.dom.*;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
 import ru.roe.pff.processing.DataRow;
+import ru.roe.pff.service.MinioService;
 
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
-import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import java.io.File;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 
+import static ru.roe.pff.files.xml.XmlUtil.FIELD_ORDER;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
 public class XmlGenerator {
 
-    private static final String[] fieldOrder = {
-        "id",
-        "available",
-        "price",
-        "currencyId",
-        "categoryId",
-        "picture",
-        "name",
-        "vendor",
-        "description",
-        "barcode",
-        "param_Артикул",
-        "param_Рейтинг",
-        "param_Количество отзывов",
-        "param_Скидка",
-        "param_Новинка"
-    };
+    private final MinioService minioService;
 
     public void saveNewXml(List<DataRow> dataRows, String fileName) {
         try {
@@ -60,7 +55,7 @@ public class XmlGenerator {
 
             // Iterate over dataRows and add offer elements
             for (DataRow dataRow : dataRows) {
-                if (dataRow.getData().size() < fieldOrder.length) {
+                if (dataRow.getData().size() < FIELD_ORDER.length) {
                     // Skip rows that don't have enough data
                     continue;
                 }
@@ -94,11 +89,17 @@ public class XmlGenerator {
             transformer.setOutputProperty(OutputKeys.INDENT, "yes");
             transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
             DOMSource source = new DOMSource(doc);
-            StreamResult result = new StreamResult(new File(fileName));
+//            StreamResult result = new StreamResult(new File(fileName));
+//            transformer.transform(source, result);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            StreamResult result = new StreamResult(baos);
             transformer.transform(source, result);
 
+            // Upload the generated XML directly to MinIO
+            ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+            minioService.uploadFile(fileName, bais, baos.size());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Error while generating processed XML", e);
         }
     }
 
