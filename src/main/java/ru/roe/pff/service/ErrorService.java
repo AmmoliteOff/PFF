@@ -3,6 +3,7 @@ package ru.roe.pff.service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.roe.pff.dto.in.ErrorSolveDto;
+import ru.roe.pff.dto.out.FileErrorDto;
 import ru.roe.pff.entity.ErrorSolve;
 import ru.roe.pff.entity.FileError;
 import ru.roe.pff.repository.FileErrorRepository;
@@ -24,7 +25,17 @@ public class ErrorService {
         fileErrorRepository.save(error);
     }
 
-    public List<FileError> getErrorsByFileId(UUID id) {
-        return fileErrorRepository.findAllByFeedFile(fileRepository.findById(id).orElseThrow());
+    public List<FileErrorDto> getErrorsByFileId(UUID id) {
+        return fileErrorRepository.findAllByFeedFile(fileRepository.findById(id).orElseThrow())
+            .stream()
+            .map(o -> new FileErrorDto(
+                o.getId(),
+                o.getError(),
+                o.getErrorSolve(),
+                o.getErrorType(),
+                o.getRowIndex(),
+                o.getColumnIndex(),
+                o.getSuppressed()
+            )).toList();
     }
 }
