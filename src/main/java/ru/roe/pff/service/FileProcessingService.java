@@ -44,6 +44,8 @@ public class FileProcessingService {
         } catch (ExecutionException e) {
             if (e.getCause() instanceof SocketException) {
                 log.error("Could not connect to the provided link: {}", link, e);
+            } else {
+                log.error("Error processing executor task: ", e);
             }
         } catch (Exception e) {
             log.error("Error processing executor task: ", e);
@@ -145,7 +147,7 @@ public class FileProcessingService {
     public void proceedProcessing(InputStream is, String fileName, UUID fileId) {
         log.debug("Processing file: {}", fileName);
 
-        String fileType = getFileExtension(fileName);
+        String fileType = "xml";
         FileParser parser = getParser(fileType);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
