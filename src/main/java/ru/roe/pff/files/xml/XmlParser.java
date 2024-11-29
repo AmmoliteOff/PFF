@@ -55,7 +55,7 @@ public class XmlParser extends FileParser {
             var rowErrors = dataRowValidator.validateRow(row, getTagNames());
             errors.addAll(rowErrors);
         }
-        dataRowValidator.clearTrackingCollections();
+        dataRowValidator.resetDuplicateTracking();
 
         log.debug("Validated file: {}", feedFile.getFileName());
         log.debug("Saving found errors... ({})", feedFile.getFileName());

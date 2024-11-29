@@ -23,22 +23,23 @@ public class DataRowValidator {
     private final Set<String> seenArticles = new HashSet<>();
     private long lastParsedId = 0;
 
-    public void clearTrackingCollections() {
+    public void resetDuplicateTracking() {
         seenDataRows.clear();
         seenArticles.clear();
+        lastParsedId = 0;
     }
 
     @Transactional
     public List<FileError> validateRow(DataRow row, List<String> tagNames) {
         fileErrorsBatch.clear();
         validateDuplicateRow(row);
-        for (int i = 1; i < row.getData().size(); i++) {
+        for (int i = 0; i < row.getData().size(); i++) {
             String tagName = tagNames.get(i);
             String tagValue = row.getData().get(i);
 
             if (tagValue.isEmpty()) {
                 addErrorToBatch(
-                        "Empty value found in tag: " + tagName,
+                        "Пустое значение на позиции: " + tagName,
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         i
@@ -65,7 +66,7 @@ public class DataRowValidator {
     private void validateDuplicateArticle(DataRow row, String tagValue, int tagIndex) {
         if (seenArticles.contains(tagValue)) {
             addErrorToBatch(
-                    "Duplicate article found: " + tagValue,
+                    "Дубликат артикула: " + tagValue,
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     tagIndex
@@ -78,7 +79,7 @@ public class DataRowValidator {
     private void validateDuplicateRow(DataRow row) {
         if (seenDataRows.contains(row)) {
             addErrorToBatch(
-                    "Duplicate offer entry",
+                    "Дубликат целой записи",
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     -1
@@ -102,7 +103,7 @@ public class DataRowValidator {
             double numericValue = Double.parseDouble(tagValue);
             if (numericValue < 0) {
                 addErrorToBatch(
-                        "Negative value found in tag: " + tagName,
+                        "Отрицательное числовое значение на позиции: " + tagName,
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -110,7 +111,7 @@ public class DataRowValidator {
             }
             if (numericValue == 0 && tagName.equals("price")) {
                 addErrorToBatch(
-                        "Invalid price value (0) in tag: " + tagName,
+                        "Неправильное значение цены (ноль) на позиции: " + tagName,
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -118,7 +119,7 @@ public class DataRowValidator {
             }
             if (numericValue >= 100.0 && tagName.toLowerCase().contains("скидка")) {
                 addErrorToBatch(
-                        "Invalid discount value (>=100) in tag: " + tagName,
+                        "Неправильное значение скидки (>=100) на позиции: " + tagName,
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -126,7 +127,7 @@ public class DataRowValidator {
             }
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                    "Invalid numeric value in tag: " + tagName,
+                    "Неправильное числовое значение на позиции: " + tagName,
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     tagIndex
@@ -135,11 +136,14 @@ public class DataRowValidator {
     }
 
     protected void validatePrimaryId(DataRow row, String tagValue, String tagName, int tagIndex) {
+        if (row.getIndex() == -1) {
+            return;
+        }
         try {
             long parsedId = Long.parseLong(tagValue);
             if (parsedId <= 0) {
                 addErrorToBatch(
-                        "Invalid ID (<0) found: " + tagValue + " in tag: " + tagName,
+                        "Неправильный ID (<0): " + tagValue,
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -147,7 +151,7 @@ public class DataRowValidator {
             }
             if (lastParsedId >= parsedId) {
                 addErrorToBatch(
-                        "Duplicate ID found: " + tagValue + " in tag: " + tagName,
+                        "Дубликат ID: " + tagValue,
                         ErrorType.TECHNICAL,
                         row.getIndex(),
                         tagIndex
@@ -156,7 +160,7 @@ public class DataRowValidator {
             lastParsedId = parsedId;
         } catch (NumberFormatException e) {
             addErrorToBatch(
-                    "Invalid ID found: " + tagValue + " in tag: " + tagName,
+                    "Неправильный ID: " + tagValue,
                     ErrorType.TECHNICAL,
                     row.getIndex(),
                     tagIndex
