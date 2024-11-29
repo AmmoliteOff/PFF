@@ -1,6 +1,7 @@
 package ru.roe.pff.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.LinkedList;
 import java.util.List;
@@ -40,6 +40,7 @@ public class FileProcessingService {
     private final FileErrorRepository fileErrorRepository;
     private final MinioService minioService;
     private final FileRequestRepository fileRequestRepository;
+    private final XmlGenerator xmlGenerator;
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
 
@@ -49,13 +50,17 @@ public class FileProcessingService {
     public void processFiles() {
         if (!queue.isEmpty()) {
             var obj = queue.poll();
-            executorService.submit(() -> {
-                try {
-                    processQueueElement(obj);
-                } catch (IOException | URISyntaxException e) {
-                    log.error("Error processing file: ", e);
-                }
-            });
+            try {
+                executorService.submit(() -> {
+                    try {
+                        processQueueElement(obj);
+                    } catch (IOException | URISyntaxException e) {
+                        log.error("Error processing file: ", e);
+                    }
+                }).get();
+            } catch (Exception e) {
+                log.error("Error processing executor task: ", e);
+            }
         }
     }
 
@@ -84,21 +89,20 @@ public class FileProcessingService {
 //        }
     }
 
-    public void generateFixedFile(UUID fileId){ //TODO сделать accept и обработку в фоне
+    public void generateFixedFile(UUID fileId) {
         var feedFile = fileRepository.findById(fileId).orElseThrow();//todo
         var is = minioService.getFile(feedFile.getFileName());
         var parser = getParser(getFileExtension(feedFile.getFileName()));
         try {
             var dataRows = parser.parseFrom(0, feedFile.getRowsCount(), is);
             var errors = fileErrorRepository.findAllByFeedFile(feedFile);
-            for(var error : errors) {
+            for (var error : errors) {
                 var row = dataRows.get(error.getRowIndex()).getData();
                 row.set(error.getErrorSolve().getColumnIndex(), error.getErrorSolve().getValue());
             }
-            saveNewXml(dataRows, "fixed_"+feedFile.getFileName());
-        }
-        catch (IOException e) {
-            //todo
+            xmlGenerator.saveNewXml(dataRows, "fixed_" + feedFile.getFileName());
+        } catch (IOException e) {
+            log.error("Error while generating fixed file: ", e);
         }
     }
 
@@ -108,36 +112,23 @@ public class FileProcessingService {
         }
 
         uploadFileToMinio(mf, fileName);
-
-        // TODO: proceed processing ASYNC!
-        executorService.submit(() -> {
-            try (InputStream is = mf.getInputStream()) {
-                proceedProcessing(is, fileName, fileId);
-            } catch (IOException e) {
-                log.error("Error processing file: ", e);
-            }
-        });
-    }
-
-    private void saveNewXml(List<DataRow> dataRows, String fileName){
-        var generator = new XmlGenerator();
-        generator.saveNewXml(dataRows, fileName);
+        try {
+            executorService.submit(() -> proceedProcessing(fileName, fileId)).get();
+        } catch (Exception e) {
+            log.error("Error processing executor task: ", e);
+        }
     }
 
     private void processLink(String link) throws IOException, URISyntaxException {
         URI uri = new URI(link);
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
-            safeFileName = getSafeFileName(LocalDateTime.now()+"_"+safeFileName);
+            safeFileName = getSafeFileName(LocalDateTime.now() + "_" + safeFileName);
             var feedFile = new FeedFile(null, safeFileName, 0);
             feedFile = fileRepository.save(feedFile);
             uploadFileToMinio(safeFileName, rbc);
 
-            try (InputStream is = new FileInputStream(safeFileName)) {
-                proceedProcessing(is, safeFileName, feedFile.getId());
-            } finally {
-                new File(safeFileName).delete();
-            }
+            proceedProcessing(safeFileName, feedFile.getId());
         }
     }
 
@@ -157,18 +148,21 @@ public class FileProcessingService {
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
                 .replaceAll("[<>:\"/|*]", "_");
-        return sub.substring(0, sub.lastIndexOf('?'));
+        var lastIndex = sub.lastIndexOf('?');
+        return lastIndex == -1 ? sub : sub.substring(0, lastIndex);
     }
 
-    private void proceedProcessing(InputStream is, String fileName, UUID fileId) throws IOException {
+    @SneakyThrows
+    private void proceedProcessing(String fileName, UUID fileId) {
         log.debug("Processing file: {}", fileName);
+        var fileStream = minioService.getFile(fileName);
 
         String fileType = getFileExtension(fileName);
         FileParser parser = getParser(fileType);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
         DataRowValidator validator = new DataRowValidator(feedFile, fileErrorRepository);
-        int rowsCount = parser.parse(validator, is);
+        int rowsCount = parser.parse(validator, fileStream);
         feedFile.setRowsCount(rowsCount);
         fileRepository.save(feedFile);
         FileRequest fileRequest = new FileRequest(null, feedFile, FileRequestType.UPLOADED);

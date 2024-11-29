@@ -1,5 +1,6 @@
 package ru.roe.pff.files.xml;
 
+import lombok.extern.slf4j.Slf4j;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 import ru.roe.pff.files.FileParser;
@@ -12,41 +13,31 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
-public class XmlParser extends FileParser {
+import static ru.roe.pff.files.xml.XmlUtil.FIELD_ORDER;
+import static ru.roe.pff.files.xml.XmlUtil.getColumnNames;
 
-    private static final String[] fieldOrder = {
-        "id",
-        "available",
-        "price",
-        "currencyId",
-        "categoryId",
-        "picture",
-        "name",
-        "vendor",
-        "description",
-        "barcode",
-        "param_Артикул",
-        "param_Рейтинг",
-        "param_Количество отзывов",
-        "param_Скидка",
-        "param_Новинка"
-    };
+@Slf4j
+public class XmlParser extends FileParser {
 
     private static final Map<String, Integer> fieldMap = new HashMap<>();
 
     static {
-        for (int i = 0; i < fieldOrder.length; i++) {
-            fieldMap.put(fieldOrder[i], i);
+        for (int i = 0; i < FIELD_ORDER.length; i++) {
+            fieldMap.put(FIELD_ORDER[i], i);
         }
     }
+
     @Override
     public Integer parse(DataRowValidator dataRowValidator, InputStream input) throws IOException {
         List<DataRow> dataRows = parseFrom(0, Integer.MAX_VALUE, input);
         int validCount = 0;
+        log.debug("Parsing XML...");
         for (DataRow row : dataRows) {
             dataRowValidator.validateRow(row, getColumnNames());
+            log.debug("Validated row: {}", row.getIndex());
             validCount++;
         }
+        log.debug("Finished parsing XML. Total count: {}", validCount);
         return validCount;
     }
 
@@ -58,13 +49,9 @@ public class XmlParser extends FileParser {
             SaxHandler handler = new SaxHandler(begin, end, dataRows);
             parser.parse(input, handler);
         } catch (Exception e) {
-            throw new IOException("SAX parsing error", e);
+            log.error("Error while parsing XML (SAX)", e);
         }
         return dataRows;
-    }
-
-    public static List<String> getColumnNames() {
-        return Collections.unmodifiableList(Arrays.asList(fieldOrder));
     }
 
     private static class SaxHandler extends DefaultHandler {
@@ -90,42 +77,52 @@ public class XmlParser extends FileParser {
         public void startElement(String uri, String localName, String qName, Attributes attributes) {
             if (qName.equals("offer")) {
                 currentRow++;
-                currentFields = new ArrayList<>(Collections.nCopies(fieldOrder.length, ""));
+                currentFields = new ArrayList<>(Collections.nCopies(FIELD_ORDER.length, ""));
                 insideOffer = true;
                 String id = attributes.getValue("id");
                 String available = attributes.getValue("available");
                 setField("id", id);
                 setField("available", available);
             } else if (insideOffer) {
-                if (qName.equals("price")) {
-                    currentElementName = "price";
-                    characters = new StringBuilder();
-                } else if (qName.equals("currencyId")) {
-                    currentElementName = "currencyId";
-                    characters = new StringBuilder();
-                } else if (qName.equals("categoryId")) {
-                    currentElementName = "categoryId";
-                    characters = new StringBuilder();
-                } else if (qName.equals("picture")) {
-                    currentElementName = "picture";
-                    characters = new StringBuilder();
-                } else if (qName.equals("name")) {
-                    currentElementName = "name";
-                    characters = new StringBuilder();
-                } else if (qName.equals("vendor")) {
-                    currentElementName = "vendor";
-                    characters = new StringBuilder();
-                } else if (qName.equals("description")) {
-                    currentElementName = "description";
-                    characters = new StringBuilder();
-                } else if (qName.equals("barcode")) {
-                    currentElementName = "barcode";
-                    characters = new StringBuilder();
-                } else if (qName.equals("param")) {
-                    String name = attributes.getValue("name");
-                    if (name != null) {
-                        currentParamName = "param_" + name;
+                switch (qName) {
+                    case "price" -> {
+                        currentElementName = "price";
                         characters = new StringBuilder();
+                    }
+                    case "currencyId" -> {
+                        currentElementName = "currencyId";
+                        characters = new StringBuilder();
+                    }
+                    case "categoryId" -> {
+                        currentElementName = "categoryId";
+                        characters = new StringBuilder();
+                    }
+                    case "picture" -> {
+                        currentElementName = "picture";
+                        characters = new StringBuilder();
+                    }
+                    case "name" -> {
+                        currentElementName = "name";
+                        characters = new StringBuilder();
+                    }
+                    case "vendor" -> {
+                        currentElementName = "vendor";
+                        characters = new StringBuilder();
+                    }
+                    case "description" -> {
+                        currentElementName = "description";
+                        characters = new StringBuilder();
+                    }
+                    case "barcode" -> {
+                        currentElementName = "barcode";
+                        characters = new StringBuilder();
+                    }
+                    case "param" -> {
+                        String name = attributes.getValue("name");
+                        if (name != null) {
+                            currentParamName = "param_" + name;
+                            characters = new StringBuilder();
+                        }
                     }
                 }
             }
@@ -141,34 +138,29 @@ public class XmlParser extends FileParser {
         @Override
         public void endElement(String uri, String localName, String qName) {
             if (insideOffer) {
-                if (qName.equals("price")) {
-                    setField("price", characters.toString());
-                } else if (qName.equals("currencyId")) {
-                    setField("currencyId", characters.toString());
-                } else if (qName.equals("categoryId")) {
-                    setField("categoryId", characters.toString());
-                } else if (qName.equals("picture")) {
-                    setField("picture", characters.toString());
-                } else if (qName.equals("name")) {
-                    setField("name", characters.toString());
-                } else if (qName.equals("vendor")) {
-                    setField("vendor", characters.toString());
-                } else if (qName.equals("description")) {
-                    setField("description", characters.toString());
-                } else if (qName.equals("barcode")) {
-                    setField("barcode", characters.toString());
-                } else if (qName.equals("param")) {
-                    if (currentParamName != null && fieldMap.containsKey(currentParamName)) {
-                        setField(currentParamName, characters.toString());
+                switch (qName) {
+                    case "price" -> setField("price", characters.toString());
+                    case "currencyId" -> setField("currencyId", characters.toString());
+                    case "categoryId" -> setField("categoryId", characters.toString());
+                    case "picture" -> setField("picture", characters.toString());
+                    case "name" -> setField("name", characters.toString());
+                    case "vendor" -> setField("vendor", characters.toString());
+                    case "description" -> setField("description", characters.toString());
+                    case "barcode" -> setField("barcode", characters.toString());
+                    case "param" -> {
+                        if (currentParamName != null && fieldMap.containsKey(currentParamName)) {
+                            setField(currentParamName, characters.toString());
+                        }
+                        currentParamName = null;
                     }
-                    currentParamName = null;
-                } else if (qName.equals("offer")) {
-                    if (currentRow >= begin && currentRow <= end) {
-                        DataRow dataRow = new DataRow(currentFields, currentRow);
-                        dataRows.add(dataRow);
+                    case "offer" -> {
+                        if (currentRow >= begin && currentRow <= end) {
+                            DataRow dataRow = new DataRow(currentFields, currentRow);
+                            dataRows.add(dataRow);
+                        }
+                        insideOffer = false;
+                        currentFields = null;
                     }
-                    insideOffer = false;
-                    currentFields = null;
                 }
                 characters = null;
                 currentElementName = null;

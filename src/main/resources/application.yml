@@ -28,6 +28,7 @@ spring:
 logging:
   level:
     ru.roe.pff: DEBUG
+#    org.springframework: DEBUG
 
 minio:
   username: minioadmin
