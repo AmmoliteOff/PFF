@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -21,7 +22,8 @@ public class FixedFeedFileLog {
     @ManyToOne(cascade = CascadeType.ALL)
     private FeedFile feedFile;
 
-    @Column
+    @CreationTimestamp
+    @Column(nullable = false)
     private Instant invokedAt;
 
     public FixedFeedFileLog(FeedFile feedFile) {

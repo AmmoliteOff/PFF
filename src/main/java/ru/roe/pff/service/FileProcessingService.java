@@ -97,45 +97,30 @@ public class FileProcessingService {
         }
 
         uploadFileToMinio(mf, fileName);
-        taskQueue.add(() -> {
-            try (InputStream is = mf.getInputStream()) {
-                proceedProcessing(is, fileName, fileId);
-            } catch (IOException e) {
-                log.error("Error processing file: ", e);
-            }
-        });
+        taskQueue.add(() -> proceedProcessing(fileName, fileId));
     }
 
     @SneakyThrows
     private void processLink(String link) {
         URI uri = new URI(link);
-
-        // TODO: Handle deleting temp file!
-
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
             safeFileName = getSafeFileName(LocalDateTime.now() + "_" + safeFileName);
 
             var feedFile = new FeedFile(safeFileName, 0, link);
-
             feedFile = fileRepository.save(feedFile);
-            uploadFileToMinio(safeFileName, rbc);
 
-            try (InputStream is = new FileInputStream(safeFileName)) {
-                proceedProcessing(is, safeFileName, feedFile.getId());
-            } catch (IOException e) {
-                log.error(e.getLocalizedMessage());
-            } finally {
-                new File(safeFileName).delete();
-            }
+            uploadFileToMinio(safeFileName, rbc);
+            proceedProcessing(safeFileName, feedFile.getId());
         }
     }
 
-    public void proceedProcessing(InputStream is, String fileName, UUID fileId) {
+    public void proceedProcessing(String fileName, UUID fileId) {
         log.debug("Processing file: {}", fileName);
+        var fileStream = minioService.getFile(fileName);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
-        int rowsCount = xmlParser.parse(feedFile.getId(), is);
+        int rowsCount = xmlParser.parse(feedFile.getId(), fileStream);
         feedFile = fileRepository.findById(fileId).orElseThrow();
         feedFile.setRowsCount(rowsCount);
         fileRepository.save(feedFile);
@@ -150,9 +135,9 @@ public class FileProcessingService {
 
     private void uploadFileToMinio(String fileName, ReadableByteChannel rbc) throws IOException {
         log.debug("Uploading file to MinIO: {}", fileName);
-        try (FileOutputStream fos = new FileOutputStream(fileName)) {
+        try (var fos = new FileOutputStream(fileName); var fis = new FileInputStream(fileName)) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-            minioService.uploadFile(fileName, new FileInputStream(fileName));
+            minioService.uploadFile(fileName, fis);
         } finally {
             new File(fileName).delete();
         }

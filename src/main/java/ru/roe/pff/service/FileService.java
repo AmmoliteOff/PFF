@@ -41,19 +41,21 @@ public class FileService {
     @Transactional
     public ResponseEntity<String> getFixedFile() {
 
-        // TODO: 'FIXED' state
-
+        // TODO: Get 'FIXED' feed file
         var latestFeedFile = fileRepository.getLatest().orElseThrow(EntityNotFoundException::new);
+
         var fileStream = minioService.getFile(latestFeedFile.getFileName());
         var xmlContent = new Scanner(fileStream, StandardCharsets.UTF_8)
                 .useDelimiter("\\A")
                 .next();
 
-        log.debug("Feed file was accessed through the static link => saved log");
+        log.debug("Feed file ({}) was accessed through the static link => saved log", latestFeedFile.getFileName());
         linkLogRepository.save(new FixedFeedFileLog(latestFeedFile));
 
         var headers = new HttpHeaders();
         headers.add(HttpHeaders.CONTENT_TYPE, "application/xml");
+        // TODO: uncomment to download right away upon GET request
+        // headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=%s.xml".formatted(latestFeedFile.getFileName()));
         return new ResponseEntity<>(xmlContent, headers, HttpStatus.OK);
     }
 
