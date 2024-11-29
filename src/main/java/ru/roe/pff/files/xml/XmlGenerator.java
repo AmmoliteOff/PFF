@@ -88,16 +88,18 @@ public class XmlGenerator {
             // Pretty-print the output
             transformer.setOutputProperty(OutputKeys.INDENT, "yes");
             transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");
+
             DOMSource source = new DOMSource(doc);
-//            StreamResult result = new StreamResult(new File(fileName));
-//            transformer.transform(source, result);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             StreamResult result = new StreamResult(baos);
             transformer.transform(source, result);
 
-            // Upload the generated XML directly to MinIO
+            log.debug("Saving processed file to MinIO...");
+
             ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
             minioService.uploadFile(fileName, bais, baos.size());
+
+            log.debug("Processed file was saved to MinIO");
         } catch (Exception e) {
             log.error("Error while generating processed XML", e);
         }

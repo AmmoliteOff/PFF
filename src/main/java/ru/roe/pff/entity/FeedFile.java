@@ -4,7 +4,9 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @AllArgsConstructor
@@ -21,4 +23,17 @@ public class FeedFile {
 
     @Column(nullable = false)
     private Integer rowsCount;
+
+    @CreationTimestamp
+    @Column(nullable = false)
+    private Instant createdAt;
+
+    @Column
+    private String link;
+
+    public FeedFile(String fileName, Integer rowsCount, String link) {
+        this.fileName = fileName;
+        this.rowsCount = rowsCount;
+        this.link = link;
+    }
 }

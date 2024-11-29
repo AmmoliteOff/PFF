@@ -21,8 +21,8 @@ public class FeedFileController {
     private final FileService fileService;
 
     @GetMapping("/fixed")
-    public ResponseEntity<String> getFixedFile(@RequestParam("fileName") String fileName) {
-        return fileService.getFixedFile(fileName);
+    public ResponseEntity<String> getFixedFile() {
+        return fileService.getFixedFile();
     }
 
     @PostMapping

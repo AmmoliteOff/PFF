@@ -2,6 +2,7 @@ package ru.roe.pff.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +11,9 @@ import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
 import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.entity.FeedFileLink;
+import ru.roe.pff.entity.FixedFeedFileLog;
 import ru.roe.pff.processing.DataRow;
+import ru.roe.pff.repository.FeedFileLinkLogRepository;
 import ru.roe.pff.repository.FeedFileLinkRepository;
 import ru.roe.pff.repository.FileRepository;
 
@@ -20,20 +23,29 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FileService {
     private static final Integer ELEMENTS_PER_PAGE = 25;
     private final FileProcessingService fileProcessingService;
+    private final FeedFileLinkLogRepository linkLogRepository;
     private final FeedFileLinkRepository linkRepository;
     private final FileRepository fileRepository;
     private final MinioService minioService;
 
-    public ResponseEntity<String> getFixedFile(String fileName) {
-        var fileStream = minioService.getFile(fileName);
+    public ResponseEntity<String> getFixedFile() {
+
+        // TODO: 'FIXED' state
+
+        var latestFeedFile = fileRepository.getLatest().orElseThrow(EntityNotFoundException::new);
+        var fileStream = minioService.getFile(latestFeedFile.getFileName());
         var xmlContent = new Scanner(fileStream, StandardCharsets.UTF_8)
                 .useDelimiter("\\A")
                 .next();
+
+        log.debug("Feed file was accessed through the static link => saved log");
+        linkLogRepository.save(new FixedFeedFileLog(latestFeedFile));
 
         var headers = new HttpHeaders();
         headers.add(HttpHeaders.CONTENT_TYPE, "application/xml");
@@ -43,7 +55,7 @@ public class FileService {
     public void createFromFile(MultipartFile file) {
         var fileName = file.getOriginalFilename();
         fileName = getSafeFileName(LocalDateTime.now() + "_" + fileName);
-        var feedFile = new FeedFile(null, fileName, 0);
+        var feedFile = new FeedFile(fileName, 0, null);
         feedFile = fileRepository.save(feedFile);
         fileProcessingService.processFile(file, fileName, feedFile.getId());
         //        fileProcessingService.addToQueue(file);

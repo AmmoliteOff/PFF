@@ -15,12 +15,14 @@ import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 
 import java.io.*;
+import java.net.SocketException;
 import java.net.URI;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
 @Slf4j
@@ -39,6 +41,10 @@ public class FileProcessingService {
     public void submitLinkToProcess(String link) {
         try {
             executorService.submit(() -> processLink(link)).get();
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof SocketException) {
+                log.error("Could not connect to the provided link: {}", link, e);
+            }
         } catch (Exception e) {
             log.error("Error processing executor task: ", e);
         }
@@ -63,6 +69,7 @@ public class FileProcessingService {
         var dataRows = parser.parseFrom(0, feedFile.getRowsCount(), is);
         var errors = fileErrorRepository.findAllByFeedFile(feedFile);
         for (var error : errors) {
+            // todo: check `error solve` for null vals
             var row = dataRows.get(error.getRowIndex()).getData();
             row.set(error.getColumnIndex(), error.getErrorSolve().getValue());
         }
@@ -76,7 +83,6 @@ public class FileProcessingService {
 
         uploadFileToMinio(mf, fileName);
 
-        // TODO: proceed processing ASYNC!
         try {
             executorService.submit(() -> {
                 try (InputStream is = mf.getInputStream()) {
@@ -100,7 +106,9 @@ public class FileProcessingService {
         try (ReadableByteChannel rbc = Channels.newChannel(uri.toURL().openStream())) {
             String safeFileName = getSafeFileName(link);
             safeFileName = getSafeFileName(LocalDateTime.now() + "_" + safeFileName);
-            var feedFile = new FeedFile(null, safeFileName, 0);
+
+            var feedFile = new FeedFile(safeFileName, 0, link);
+
             feedFile = fileRepository.save(feedFile);
             uploadFileToMinio(safeFileName, rbc);
 
