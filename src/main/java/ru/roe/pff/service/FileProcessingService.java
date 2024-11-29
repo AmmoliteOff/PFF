@@ -6,11 +6,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import ru.roe.pff.entity.ErrorSolve;
 import ru.roe.pff.entity.FeedFile;
+import ru.roe.pff.entity.FileError;
+import ru.roe.pff.enums.ErrorType;
 import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.xml.XmlGenerator;
 import ru.roe.pff.files.xml.XmlParser;
+import ru.roe.pff.llm.service.LLMService;
 import ru.roe.pff.processing.DataRow;
+import ru.roe.pff.processing.LlmWarnings;
 import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 
@@ -39,6 +44,7 @@ public class FileProcessingService {
     private final MinioService minioService;
     private final FileRepository fileRepository;
     private final ExecutorService executorService;
+    private final LLMService llmService;
 
     private final XmlParser xmlParser;
     private final XmlGenerator xmlGenerator;
@@ -115,19 +121,6 @@ public class FileProcessingService {
         }
     }
 
-    public void proceedProcessing(String fileName, UUID fileId) {
-        log.debug("Processing file: {}", fileName);
-        var fileStream = minioService.getFile(fileName);
-
-        FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
-        int rowsCount = xmlParser.parse(feedFile.getId(), fileStream);
-        feedFile = fileRepository.findById(fileId).orElseThrow();
-        feedFile.setRowsCount(rowsCount);
-        fileRepository.save(feedFile);
-
-        log.debug("Processed and parsed file: {}", fileName);
-    }
-
     private void uploadFileToMinio(MultipartFile mf, String fileName) {
         log.debug("Uploading file to MinIO: {}", fileName);
         minioService.uploadFile(fileName, mf);
@@ -148,6 +141,36 @@ public class FileProcessingService {
                 .replaceAll("[<>:\"/|*]", "_");
         var lastIndex = sub.lastIndexOf('?');
         return lastIndex != -1 ? sub.substring(0, lastIndex) : sub;
+    }
+
+    public void proceedProcessing(String fileName, UUID fileId) {
+        log.debug("Processing file: {}", fileName);
+        var fileStream = minioService.getFile(fileName);
+
+        FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
+        var rows = xmlParser.parse(feedFile.getId(), fileStream);
+        var aiSuggestions = llmService.checkForTitleChange(rows);
+        addAiSuggestions(aiSuggestions, feedFile);
+        feedFile.setRowsCount(rows.size());
+        fileRepository.save(feedFile);
+
+        log.debug("Processed and parsed file: {}", fileName);
+    }
+
+    private void addAiSuggestions(List<LlmWarnings> aiSuggestions, FeedFile feedFile) {
+        for (var suggestion : aiSuggestions) {
+            var error = new FileError(
+                    null,
+                    feedFile,
+                    suggestion.getMessage(),
+                    new ErrorSolve(null, suggestion.getValue()),
+                    ErrorType.AI,
+                    suggestion.getRowIndex(),
+                    suggestion.getColumnIndex() - 1,
+                    false
+            );
+            fileErrorRepository.save(error);
+        }
     }
 
     private void verifyLinkIsAccessible(String link) {

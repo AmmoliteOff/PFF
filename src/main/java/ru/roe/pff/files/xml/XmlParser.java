@@ -41,19 +41,18 @@ public class XmlParser extends FileParser {
 
     @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Integer parse(UUID fileId, InputStream input) {
+    public List<DataRow> parse(UUID fileId, InputStream input) {
         List<FileError> errors = new ArrayList<>();
         List<DataRow> dataRows = parseFrom(0, Integer.MAX_VALUE, input);
-        int validCount = 0;
+
         for (DataRow row : dataRows) {
             var rowErrors = dataRowValidator.validateRow(row, getColumnNames());
-            validCount++;
             errors.addAll(rowErrors);
         }
         var feedFile = fileRepository.findById(fileId).orElseThrow();
         errors.forEach(value -> value.setFeedFile(feedFile));
         saveAllErrors(errors);
-        return validCount;
+        return dataRows;
     }
 
     private void saveAllErrors(List<FileError> errors) {

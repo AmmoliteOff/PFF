@@ -1,6 +1,7 @@
 package ru.roe.pff.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.roe.pff.enums.ErrorType;
@@ -10,6 +11,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @Entity
 @Data
+@AllArgsConstructor
 public class FileError {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -21,7 +23,7 @@ public class FileError {
     @Column(nullable = false)
     private String error;
 
-    @OneToOne(cascade = CascadeType.MERGE)
+    @OneToOne(cascade = CascadeType.ALL)
     private ErrorSolve errorSolve;
 
     @Column
@@ -33,4 +35,7 @@ public class FileError {
 
     @Column(nullable = false)
     private Integer columnIndex;
+
+    @Column(nullable = false)
+    private Boolean suppressed;
 }
