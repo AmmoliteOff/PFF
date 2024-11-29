@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.minio.MinioObjectStorage;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.InputStream;
 
@@ -18,6 +19,10 @@ public class MinioService { //TODO
 
     public InputStream getFile(String fileName) {
         return objectStorage.get(DEFAULT_BUCKET_NAME, fileName);
+    }
+
+    public void uploadFile(String fileName, ByteArrayInputStream bais, long size) {
+        objectStorage.upload(DEFAULT_BUCKET_NAME, fileName, bais, size);
     }
 
     public void uploadFile(String fileName, MultipartFile file) {

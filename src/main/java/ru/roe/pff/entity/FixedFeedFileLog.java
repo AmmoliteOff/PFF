@@ -4,27 +4,27 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import ru.roe.pff.enums.FileRequestType;
 
-import java.util.List;
+import java.time.Instant;
 import java.util.UUID;
 
 @AllArgsConstructor
 @NoArgsConstructor
 @Entity
 @Data
-public class FileRequest {
+public class FixedFeedFileLog {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @OneToOne(cascade = CascadeType.ALL)
-    private FeedFile file;
-
-    @OneToMany
-    private List<FileError> errors;
+    @ManyToOne(cascade = CascadeType.ALL)
+    private FeedFile feedFile;
 
     @Column
-    @Enumerated(value = EnumType.STRING)
-    private FileRequestType type;
+    private Instant invokedAt;
+
+    public FixedFeedFileLog(FeedFile feedFile) {
+        this.feedFile = feedFile;
+    }
 }

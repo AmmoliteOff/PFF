@@ -1,5 +1,8 @@
 name: pff-dev
 
+volumes:
+  pgdata:
+
 services:
   minio:
     image: minio/minio:RELEASE.2024-05-10T01-41-38Z-cpuv1
@@ -13,3 +16,13 @@ services:
       - "9001:9001"
     logging:
       driver: local
+  db:
+      image: postgres
+      environment:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: pff
+      ports:
+        - "5432:5432"
+      volumes:
+        - pgdata:/var/lib/postgresql/data

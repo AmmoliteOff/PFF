@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.exception.ApiException;
 
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.InputStream;
 
@@ -33,6 +34,21 @@ public class MinioObjectStorage {
         } catch (Exception e) {
             log.error("Error while checking for file existence: ", e);
             return false;
+        }
+    }
+
+    public void upload(String bucket, String objName, ByteArrayInputStream bais, long size) {
+        try {
+            final var poa = PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objName)
+                    .stream(bais, size, -1)
+                    .build();
+            minioClient.putObject(poa);
+            log.debug("File uploaded to Minio: {}", poa);
+        } catch (Exception e) {
+            log.error("Error while uploading the file: ", e);
+            throw new ApiException("Error while uploading the file.");
         }
     }
 

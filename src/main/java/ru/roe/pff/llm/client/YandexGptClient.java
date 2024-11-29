@@ -7,14 +7,10 @@ import ru.roe.pff.llm.dto.PromtResponseDto;
 import ru.roe.pff.llm.utils.Promt;
 
 @FeignClient(name = "yandex-gpt-client", url = "https://iam.api.cloud.yandex.net")
-public class YandexGptClient {
+public interface YandexGptClient {
     @PostMapping("/iam/v1/tokens")
-    public void getToken() {
-
-    }
+    void getToken();
 
     @PostMapping("/foundationModels/v1/completion")
-    public PromtResponseDto producePromt(@RequestBody Promt promt) {
-        return null;
-    }
+    PromtResponseDto producePromt(@RequestBody Promt promt);
 }

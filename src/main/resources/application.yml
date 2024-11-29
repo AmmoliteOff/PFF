@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: "optional:configserver:"
   llm:
     uri: gpt://b1gs02efi9ecn1ih2v9r/yandexgpt/latest
     oAuthToken: y0_AgAAAAAXLrNhAATuwQAAAAEaPIoxAABqS2O6cN1DF5PNS3DhknWVUMNXvg
@@ -19,17 +21,21 @@ spring:
     multipart:
       max-file-size: 700MB
       max-request-size: 700MB
+  cloud:
+    config:
+      enabled: false
 
 logging:
   level:
     ru.roe.pff: DEBUG
+#    org.springframework: DEBUG
 
 minio:
   username: minioadmin
   password: minioadmin
   url: "http://localhost:9000"
   bucket-name: "pff-bucket"
-  
+
 application:
   llm:
     coverage: 0.3
