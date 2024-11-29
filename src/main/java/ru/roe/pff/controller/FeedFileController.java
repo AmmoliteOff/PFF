@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
+import ru.roe.pff.dto.out.PagesCountDto;
 import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.processing.DataRow;
 import ru.roe.pff.service.FileService;
@@ -55,6 +56,11 @@ public class FeedFileController {
     @PostMapping("/complete/{id}")
     public void completeFile(@PathVariable UUID id) {
         fileService.completeFile(id);
+    }
+
+    @GetMapping("/{id}/pages")
+    public PagesCountDto getPages(@PathVariable UUID id){
+        return fileService.getPages(id);
     }
 
 }

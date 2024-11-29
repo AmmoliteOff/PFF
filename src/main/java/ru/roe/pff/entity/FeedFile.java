@@ -3,6 +3,7 @@ package ru.roe.pff.entity;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -13,6 +14,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @Entity
 @Data
+@EqualsAndHashCode
 public class FeedFile {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

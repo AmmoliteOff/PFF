@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import ru.roe.pff.dto.in.FileLinkDto;
+import ru.roe.pff.dto.out.PagesCountDto;
 import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.entity.FeedFileLink;
 import ru.roe.pff.entity.FixedFeedFileLog;
@@ -92,5 +93,12 @@ public class FileService {
     private String getSafeFileName(String link) {
         return link.substring(link.indexOf("://") + 3)
                 .replaceAll("[<>:\"/|*]", "_");
+    }
+
+    public PagesCountDto getPages(UUID id) {
+        var count = fileRepository.findById(id)
+            .orElseThrow(() -> new EntityNotFoundException(String.format("Feed File with UUID %s not found", id))).getRowsCount();
+
+        return new PagesCountDto((int) Math.ceil((double) count /ELEMENTS_PER_PAGE));
     }
 }

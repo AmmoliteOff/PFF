@@ -53,7 +53,7 @@ public class FileProcessingService {
     }
 
     public List<DataRow> getFrom(FeedFile feedFile, Integer begin, Integer end) {
-        String fileType = getFileExtension(feedFile.getFileName());
+        String fileType = "xml";
         FileParser parser = getParser(fileType);
         try (InputStream is = minioService.getFile(feedFile.getFileName())) {
             return parser.parseFrom(begin, end, is);
