@@ -18,5 +18,6 @@ public interface FileErrorRepository extends JpaRepository<FileError, UUID> {
 
     Page<FileError> findAllByFeedFileOrderByCreatedAtDesc(Pageable pageable, FeedFile feedFile);
 
-    Page<FileError> findAllByErrorTypeAndFeedFileOrderByCreatedAtDesc(Pageable pageable, FeedFile feedFile, ErrorType errorType);
+
+    Page<FileError> findAllByFeedFileAndErrorTypeOrderByCreatedAtDesc(Pageable pageable, FeedFile feedFile, ErrorType errorType);
 }

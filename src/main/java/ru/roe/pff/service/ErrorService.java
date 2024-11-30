@@ -111,6 +111,6 @@ public class ErrorService {
     public Page<FileError> getErrorsFiltered(UUID id, int page, ErrorType errorType) {
         Pageable pageable = PageRequest.of(page, 10);
         var feedFile = fileRepository.findById(id).orElseThrow();
-        return fileErrorRepository.findAllByErrorTypeAndFeedFileOrderByCreatedAtDesc(pageable, feedFile, errorType);
+        return fileErrorRepository.findAllByFeedFileAndErrorTypeOrderByCreatedAtDesc(pageable, feedFile, errorType);
     }
 }
