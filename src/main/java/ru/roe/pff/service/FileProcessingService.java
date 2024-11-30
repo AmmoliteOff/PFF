@@ -3,6 +3,7 @@ package ru.roe.pff.service;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,6 +17,7 @@ import ru.roe.pff.files.xml.XmlGenerator;
 import ru.roe.pff.files.xml.XmlParser;
 import ru.roe.pff.llm.service.LLMService;
 import ru.roe.pff.processing.DataRow;
+import ru.roe.pff.processing.DataRowValidator;
 import ru.roe.pff.processing.LlmWarnings;
 import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
@@ -29,7 +31,10 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
+
+import static ru.roe.pff.files.xml.XmlParser.getTagNames;
 
 @Slf4j
 @Service
@@ -46,6 +51,9 @@ public class FileProcessingService {
 
     private final XmlParser xmlParser;
     private final XmlGenerator xmlGenerator;
+
+    private final DataRowValidator dataRowValidator;
+
 
     private final Queue<Runnable> taskQueue = new LinkedList<>();
 
@@ -88,7 +96,7 @@ public class FileProcessingService {
         var errors = fileErrorRepository.findAllByFeedFile(feedFile);
 
         for (var error : errors) {
-            if(error.getErrorSolve() != null && !Objects.equals(error.getErrorSolve().getValue(), "")) {
+            if (error.getErrorSolve() != null && !Objects.equals(error.getErrorSolve().getValue(), "")) {
                 var row = dataRows.get(error.getRowIndex()).getData();
                 row.set(error.getColumnIndex(), error.getErrorSolve().getValue());
             }
@@ -141,11 +149,12 @@ public class FileProcessingService {
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
-            .replaceAll("[<>:\"/|*]", "_");
+                .replaceAll("[<>:\"/|*]", "_");
         var lastIndex = sub.lastIndexOf('?');
         return lastIndex != -1 ? sub.substring(0, lastIndex) : sub;
     }
 
+    @SneakyThrows
     public void proceedProcessing(String fileName, UUID fileId) {
         log.debug("PROCESSING FILE... ({})", fileName);
         var fileStream = minioService.getFile(fileName);
@@ -157,6 +166,9 @@ public class FileProcessingService {
         log.debug("Parsing file... ({})", fileName);
         var rows = xmlParser.parse(feedFile.getId(), fileStream);
 
+        var validateTask = getCallableValidateTask(feedFile, rows);
+        var future = executorService.submit(validateTask);
+
         var aiSuggestions = llmService.checkFieldWithAi(rows);
         addAiSuggestions(rows.get(0).getData(), aiSuggestions, feedFile);
 
@@ -165,7 +177,36 @@ public class FileProcessingService {
         feedFile.setStatus(FileStatus.PROCESSED);
         fileRepository.save(feedFile);
 
+        var isCompleted = future.get();
+        if (isCompleted) {
+            log.debug("Callable task completed!");
+        } else {
+            log.error("Callable task failed!");
+        }
         log.debug("PROCESSED FILE: {}", fileName);
+    }
+
+    @NotNull
+    private Callable<Boolean> getCallableValidateTask(FeedFile feedFile, List<DataRow> rows) {
+        var errors = new ArrayList<FileError>();
+        return () -> {
+            log.debug("Validating file... ({})", feedFile.getFileName());
+
+            for (DataRow row : rows) {
+                var rowErrors = dataRowValidator.validateRow(row, getTagNames());
+                errors.addAll(rowErrors);
+            }
+            dataRowValidator.resetDuplicateTracking();
+
+            log.debug("Validated file: {}", feedFile.getFileName());
+            log.debug("Saving found errors... ({})", feedFile.getFileName());
+
+            errors.forEach(value -> value.setFeedFile(feedFile));
+            fileErrorRepository.saveAll(errors);
+
+            log.debug("Saved found errors for file: {}", feedFile.getFileName());
+            return true;
+        };
     }
 
     private void addAiSuggestions(List<String> titles, List<LlmWarnings> aiSuggestions, FeedFile feedFile) {
@@ -173,17 +214,17 @@ public class FileProcessingService {
         var errors = new ArrayList<FileError>();
         for (var suggestion : aiSuggestions) {
             errors.add(new FileError(
-                null,
-                feedFile,
-                suggestion.getTitle(),
-                suggestion.getMessage(),
-                new ErrorSolve(null, suggestion.getValue()),
-                ErrorType.AI,
-                suggestion.getRowIndex(),
-                titles.indexOf(suggestion.getColumn()),
-                LocalDateTime.now(),
-                false,
-                false
+                    null,
+                    feedFile,
+                    suggestion.getTitle(),
+                    suggestion.getMessage(),
+                    new ErrorSolve(null, suggestion.getValue()),
+                    ErrorType.AI,
+                    suggestion.getRowIndex(),
+                    titles.indexOf(suggestion.getColumn()),
+                    LocalDateTime.now(),
+                    false,
+                    false
             ));
         }
         log.debug("Added AI suggestions to file: {}", feedFile.getFileName());

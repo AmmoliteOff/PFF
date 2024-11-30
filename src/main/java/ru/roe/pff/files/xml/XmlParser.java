@@ -8,11 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
-import ru.roe.pff.entity.FileError;
 import ru.roe.pff.files.FileParser;
 import ru.roe.pff.processing.DataRow;
-import ru.roe.pff.processing.DataRowValidator;
-import ru.roe.pff.repository.FileErrorRepository;
 import ru.roe.pff.repository.FileRepository;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -28,8 +25,6 @@ import static ru.roe.pff.files.xml.XmlUtil.FIELD_ORDER;
 @Component
 @RequiredArgsConstructor
 public class XmlParser extends FileParser {
-    private final DataRowValidator dataRowValidator;
-    private final FileErrorRepository fileErrorRepository;
 
     private static final Map<String, Integer> fieldMap = new HashMap<>();
 
@@ -45,25 +40,10 @@ public class XmlParser extends FileParser {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<DataRow> parse(UUID fileId, InputStream input) {
         var feedFile = fileRepository.findById(fileId).orElseThrow();
-        List<FileError> errors = new ArrayList<>();
         List<DataRow> dataRows = parseFrom(0, Integer.MAX_VALUE, input);
 
         log.debug("Parsed file: {}", feedFile.getFileName());
-        log.debug("Validating file... ({})", feedFile.getFileName());
 
-        for (DataRow row : dataRows) {
-            var rowErrors = dataRowValidator.validateRow(row, getTagNames());
-            errors.addAll(rowErrors);
-        }
-        dataRowValidator.resetDuplicateTracking();
-
-        log.debug("Validated file: {}", feedFile.getFileName());
-        log.debug("Saving found errors... ({})", feedFile.getFileName());
-
-        errors.forEach(value -> value.setFeedFile(feedFile));
-        fileErrorRepository.saveAll(errors);
-
-        log.debug("Saved found errors for file: {}", feedFile.getFileName());
         return dataRows;
     }
 
