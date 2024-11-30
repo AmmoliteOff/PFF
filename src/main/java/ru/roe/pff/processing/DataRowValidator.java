@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.roe.pff.entity.FileError;
 import ru.roe.pff.enums.ErrorType;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -186,6 +187,8 @@ public class DataRowValidator {
         fileError.setSuppressed(false);
         fileError.setRowIndex(rowIndex);
         fileError.setColumnIndex(tagIndex);
+        fileError.setUseSolve(false);
+        fileError.setCreatedAt(LocalDateTime.now());
         fileErrorsBatch.add(fileError);
     }
 

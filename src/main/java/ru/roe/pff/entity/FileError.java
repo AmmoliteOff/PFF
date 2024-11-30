@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import ru.roe.pff.enums.ErrorType;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @NoArgsConstructor
@@ -23,7 +24,7 @@ public class FileError {
     @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 1024)
     private String description;
 
     @OneToOne(cascade = CascadeType.ALL)
@@ -39,6 +40,13 @@ public class FileError {
     @Column(nullable = false)
     private Integer columnIndex;
 
+    @Column(nullable = false, updatable = false)
+    @Temporal(TemporalType.TIMESTAMP)
+    private LocalDateTime createdAt;
+
     @Column(nullable = false)
     private Boolean suppressed;
+
+    @Column(nullable = false)
+    private Boolean useSolve;
 }

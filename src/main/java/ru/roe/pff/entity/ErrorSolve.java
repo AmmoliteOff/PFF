@@ -15,5 +15,7 @@ public class ErrorSolve {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
+
+    @Column(length = 1024)
     private String value;
 }

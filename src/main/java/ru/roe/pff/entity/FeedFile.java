@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import ru.roe.pff.enums.FileStatus;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -33,9 +34,16 @@ public class FeedFile {
     @Column
     private String link;
 
-    public FeedFile(String fileName, Integer rowsCount, String link) {
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private FileStatus status;
+
+    private String fixedFileName;
+
+    public FeedFile(String fileName, Integer rowsCount, String link, FileStatus status) {
         this.fileName = fileName;
         this.rowsCount = rowsCount;
         this.link = link;
+        this.status = status;
     }
 }

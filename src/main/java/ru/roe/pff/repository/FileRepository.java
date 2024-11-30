@@ -14,7 +14,7 @@ public interface FileRepository extends JpaRepository<FeedFile, UUID> {
     @Query(value = "select * from public.feed_file order by created_at desc limit 1", nativeQuery = true)
     Optional<FeedFile> getLatest();
 
-    @Query(value = "select link from public.feed_file order by created_at desc limit 1", nativeQuery = true)
-    Optional<String> getLatestFixedLink();
+    @Query(value = "select * from public.feed_file where status = 'COMPLETED' order by created_at desc limit 1", nativeQuery = true)
+    Optional<FeedFile> getLatestFixedLink();
 
 }

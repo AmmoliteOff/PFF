@@ -10,6 +10,7 @@ import ru.roe.pff.entity.ErrorSolve;
 import ru.roe.pff.entity.FeedFile;
 import ru.roe.pff.entity.FileError;
 import ru.roe.pff.enums.ErrorType;
+import ru.roe.pff.enums.FileStatus;
 import ru.roe.pff.exception.ApiException;
 import ru.roe.pff.files.xml.XmlGenerator;
 import ru.roe.pff.files.xml.XmlParser;
@@ -80,18 +81,22 @@ public class FileProcessingService {
     }
 
     public void generateFixedFile(UUID fileId) {
-        var feedFile = fileRepository.findById(fileId).orElseThrow();//todo
+        var feedFile = fileRepository.findById(fileId).orElseThrow();
         var is = minioService.getFile(feedFile.getFileName());
 
         var dataRows = xmlParser.parseFrom(0, feedFile.getRowsCount(), is);
         var errors = fileErrorRepository.findAllByFeedFile(feedFile);
 
         for (var error : errors) {
-            // todo: check `error solve` for null vals
-            var row = dataRows.get(error.getRowIndex()).getData();
-            row.set(error.getColumnIndex(), error.getErrorSolve().getValue());
+            if(error.getErrorSolve() != null && !Objects.equals(error.getErrorSolve().getValue(), "")) {
+                var row = dataRows.get(error.getRowIndex()).getData();
+                row.set(error.getColumnIndex(), error.getErrorSolve().getValue());
+            }
         }
         xmlGenerator.saveNewXml(dataRows, "fixed_" + feedFile.getFileName());
+        feedFile.setStatus(FileStatus.COMPLETED);
+        feedFile.setFixedFileName("fixed_" + feedFile.getFileName());
+        fileRepository.save(feedFile);
     }
 
     void processFile(MultipartFile mf, String fileName, UUID fileId) {
@@ -110,7 +115,7 @@ public class FileProcessingService {
             String safeFileName = getSafeFileName(link);
             safeFileName = getSafeFileName(LocalDateTime.now() + "_" + safeFileName);
 
-            var feedFile = new FeedFile(safeFileName, 0, link);
+            var feedFile = new FeedFile(safeFileName, 0, link, FileStatus.CREATED);
             feedFile = fileRepository.save(feedFile);
 
             uploadFileToMinio(safeFileName, rbc);
@@ -125,7 +130,8 @@ public class FileProcessingService {
 
     private void uploadFileToMinio(String fileName, ReadableByteChannel rbc) throws IOException {
         log.debug("Uploading file to MinIO: {}", fileName);
-        try (var fos = new FileOutputStream(fileName); var fis = new FileInputStream(fileName)) {
+        try (var fos = new FileOutputStream(fileName);
+             var fis = new FileInputStream(fileName)) {
             fos.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
             minioService.uploadFile(fileName, fis);
         } finally {
@@ -135,7 +141,7 @@ public class FileProcessingService {
 
     private String getSafeFileName(String link) {
         String sub = link.substring(link.indexOf("://") + 3)
-                .replaceAll("[<>:\"/|*]", "_");
+            .replaceAll("[<>:\"/|*]", "_");
         var lastIndex = sub.lastIndexOf('?');
         return lastIndex != -1 ? sub.substring(0, lastIndex) : sub;
     }
@@ -145,34 +151,39 @@ public class FileProcessingService {
         var fileStream = minioService.getFile(fileName);
 
         FeedFile feedFile = fileRepository.findById(fileId).orElseThrow();
+        feedFile.setStatus(FileStatus.PROCESSING);
+        fileRepository.save(feedFile);
 
         log.debug("Parsing file... ({})", fileName);
         var rows = xmlParser.parse(feedFile.getId(), fileStream);
 
-        var aiSuggestions = llmService.checkForTitleChange(rows);
-        addAiSuggestions(aiSuggestions, feedFile);
+        var aiSuggestions = llmService.checkFieldWithAi(rows);
+        addAiSuggestions(rows.get(0).getData(), aiSuggestions, feedFile);
 
         log.debug("Saving processed file... ({})", feedFile.getFileName());
         feedFile.setRowsCount(rows.size());
+        feedFile.setStatus(FileStatus.PROCESSED);
         fileRepository.save(feedFile);
 
         log.debug("PROCESSED FILE: {}", fileName);
     }
 
-    private void addAiSuggestions(List<LlmWarnings> aiSuggestions, FeedFile feedFile) {
+    private void addAiSuggestions(List<String> titles, List<LlmWarnings> aiSuggestions, FeedFile feedFile) {
         log.debug("Adding AI suggestions to file... ({})", feedFile.getFileName());
         var errors = new ArrayList<FileError>();
         for (var suggestion : aiSuggestions) {
             errors.add(new FileError(
-                    null,
-                    feedFile,
-                    suggestion.getMessage(),
-                    "", // TODO: Добавить описание или тайтл!
-                    new ErrorSolve(null, suggestion.getValue()),
-                    ErrorType.AI,
-                    suggestion.getRowIndex(),
-                    suggestion.getColumnIndex() - 1,
-                    false
+                null,
+                feedFile,
+                suggestion.getTitle(),
+                suggestion.getMessage(),
+                new ErrorSolve(null, suggestion.getValue()),
+                ErrorType.AI,
+                suggestion.getRowIndex(),
+                titles.indexOf(suggestion.getColumn()),
+                LocalDateTime.now(),
+                false,
+                false
             ));
         }
         log.debug("Added AI suggestions to file: {}", feedFile.getFileName());

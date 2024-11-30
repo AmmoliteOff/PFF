@@ -6,8 +6,9 @@ import lombok.Data;
 @Data
 @AllArgsConstructor
 public class LlmWarnings {
+    private String title;
     private String message;
     private String value;
     private int rowIndex;
-    private int columnIndex;
+    private String column;
 }
